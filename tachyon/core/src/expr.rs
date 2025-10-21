@@ -323,9 +323,6 @@ impl Expr {
     }
 }
 
-/// Very small codegen trait that emits NVRTC/C++ expression string. In real
-/// usage you'd want a richer CodegenContext (temporary naming, column access,
-/// kernels, types, memory layout, vectorization, etc.).
 pub trait ToNvrtc {
     fn to_nvrtc(&self, schema: &SchemaContext) -> Result<String, TypeError>;
 }

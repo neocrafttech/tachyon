@@ -16,3 +16,5 @@ version = "0.1.0"
 cargo-nextest = "0.9.1"
 mimalloc = { version = "*", features = ["v3"] }
 thiserror = "2.0.17"
+sha2 = "0.10.9"
+rand = "0.9.2"

@@ -53,8 +53,16 @@ build() {
 }
 
 test() {
-    echo "[INFO] Testing workspace..."
-    cargo nextest run
+    echo "[INFO] Running CPU tests..."
+    cargo nextest run --no-default-features || return 1
+
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        echo "[INFO] CUDA detected — running GPU tests..."
+        cargo nextest run --features gpu || return 1
+    else
+        echo "[WARN] CUDA not detected — skipping GPU tests."
+    fi
+
     echo "[OK] Testing completed!"
 }
 

@@ -10,4 +10,13 @@ readme.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+gpu = []
+
 [dependencies]
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+rand.workspace = true
