@@ -21,16 +21,10 @@ unsafe extern "C" {
     pub fn cudaFree(devPtr: *mut c_void) -> CudaError;
     pub fn cudaFreeHost(ptr: *mut c_void) -> CudaError;
     pub fn cudaMemcpy(
-        dst: *mut c_void,
-        src: *const c_void,
-        count: usize,
-        kind: CudaMemcpyKind,
+        dst: *mut c_void, src: *const c_void, count: usize, kind: CudaMemcpyKind,
     ) -> CudaError;
     pub fn cudaMemcpyAsync(
-        dst: *mut c_void,
-        src: *const c_void,
-        count: usize,
-        kind: CudaMemcpyKind,
+        dst: *mut c_void, src: *const c_void, count: usize, kind: CudaMemcpyKind,
         stream: *mut c_void,
     ) -> CudaError;
     pub fn cudaMallocManaged(devPtr: *mut *mut c_void, size: usize, flags: u32) -> CudaError;
@@ -306,11 +300,7 @@ impl<T> ManagedMemory<T> {
             }
         }
 
-        Ok(ManagedMemory {
-            ptr: ptr as *mut T,
-            len,
-            _phantom: PhantomData,
-        })
+        Ok(ManagedMemory { ptr: ptr as *mut T, len, _phantom: PhantomData })
     }
 
     /// Direct access as slice (since managed memory is host-accessible)

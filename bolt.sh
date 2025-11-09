@@ -6,15 +6,15 @@ setup_rust(){
     if command -v rustc >/dev/null 2>&1; then
         CURRENT_VERSION=$(rustc --version | awk '{print $2}')
         echo "[INFO] Found Rust version $CURRENT_VERSION"
-        if [ "$CURRENT_VERSION" != "1.90.0" ]; then
-            echo "[INFO] Updating Rust to 1.90.0..."
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.90.0
+        if [ "$CURRENT_VERSION" != "1.91.0" ]; then
+            echo "[INFO] Updating Rust to 1.91.0..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.91.0
         else
-            echo "[OK] Rust is already 1.90.0"
+            echo "[OK] Rust is already 1.91.0"
         fi
     else
-        echo "[INFO] Rust not found. Installing Rust 1.90.0..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.90.0
+        echo "[INFO] Rust not found. Installing Rust 1.91.0..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.91.0
     fi
 
     export PATH="$HOME/.cargo/bin:$PATH"
@@ -28,8 +28,16 @@ setup_rust(){
     cargo nextest --version
 }
 
+setup_cuda(){
+	wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+	sudo dpkg -i cuda-keyring_1.1-1_all.deb
+	sudo apt-get update
+	sudo apt-get -y install cuda-toolkit-13-0
+	sudo apt-get install -y cuda-drivers
+}
 setup() {
     setup_rust
+    setup_cuda
 }
 
 check() {
@@ -56,11 +64,12 @@ test() {
     echo "[INFO] Running CPU tests..."
     cargo nextest run --no-default-features || return 1
 
-    if command -v nvidia-smi >/dev/null 2>&1; then
-        echo "[INFO] CUDA detected — running GPU tests..."
+    if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+        echo "[INFO] CUDA GPU detected — running GPU tests..."
         cargo nextest run --features gpu || return 1
     else
-        echo "[WARN] CUDA not detected — skipping GPU tests."
+        echo "[WARN] CUDA GPU not detected — skipping GPU tests."
+        echo "[INFO] (CUDA toolkit may be installed, but no working GPU/driver found)"
     fi
 
     echo "[OK] Testing completed!"

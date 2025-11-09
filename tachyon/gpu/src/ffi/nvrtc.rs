@@ -16,18 +16,12 @@ pub enum NvrtcResult {
 #[link(name = "nvrtc")]
 unsafe extern "C" {
     pub fn nvrtcCreateProgram(
-        prog: *mut *mut std::ffi::c_void,
-        src: *const i8,
-        name: *const i8,
-        num_headers: i32,
-        headers: *const *const i8,
-        include_names: *const *const i8,
+        prog: *mut *mut std::ffi::c_void, src: *const i8, name: *const i8, num_headers: i32,
+        headers: *const *const i8, include_names: *const *const i8,
     ) -> NvrtcResult;
 
     pub fn nvrtcCompileProgram(
-        prog: *mut std::ffi::c_void,
-        num_options: i32,
-        options: *const *const i8,
+        prog: *mut std::ffi::c_void, num_options: i32, options: *const *const i8,
     ) -> NvrtcResult;
 
     pub fn nvrtcGetCUBINSize(prog: *mut std::ffi::c_void, cubin_size: *mut usize) -> NvrtcResult;
@@ -45,9 +39,7 @@ unsafe extern "C" {
 }
 
 pub fn check_nvrtc(
-    result: NvrtcResult,
-    msg: &str,
-    prog: *mut std::ffi::c_void,
+    result: NvrtcResult, msg: &str, prog: *mut std::ffi::c_void,
 ) -> Result<(), String> {
     if result != NvrtcResult::Success {
         unsafe {

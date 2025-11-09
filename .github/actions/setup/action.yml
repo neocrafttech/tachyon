@@ -1,0 +1,35 @@
+name: Setup Rust Env
+description: "Checkout repo, install protobuf, and make build script executable"
+runs:
+    using: "composite"
+    steps:
+        - uses: actions/checkout@v4
+
+        - name: Update apt
+          run: apt-get update
+          shell: bash
+
+        - name: Install protobuf
+          run: apt-get install -y protobuf-compiler libprotobuf-dev
+          shell: bash
+
+        - name: Install Rust components
+          run: rustup component add rustfmt clippy
+          shell: bash
+
+        - name: Cache rust packages
+          if: ${{ !env.ACT }}
+          uses: swatinem/rust-cache@v2.7.7
+
+        - name: Make build script executable
+          run: chmod +x ./bolt.sh
+          shell: bash
+
+        - name: Setup CUDA
+          run: |
+              wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+              dpkg -i cuda-keyring_1.1-1_all.deb
+              apt-get update
+              apt-get -y install cuda-toolkit-13-0
+              apt-get install -y cuda-drivers
+          shell: bash

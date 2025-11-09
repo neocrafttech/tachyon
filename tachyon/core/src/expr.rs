@@ -45,26 +45,13 @@ pub enum Expr {
 
     Literal(Literal),
 
-    Binary {
-        op: BinaryOp,
-        left: Box<Expr>,
-        right: Box<Expr>,
-    },
+    Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
 
-    Unary {
-        op: UnaryOp,
-        expr: Box<Expr>,
-    },
+    Unary { op: UnaryOp, expr: Box<Expr> },
 
-    Call {
-        name: String,
-        args: Vec<Expr>,
-    },
+    Call { name: String, args: Vec<Expr> },
 
-    Cast {
-        expr: Box<Expr>,
-        to: DataType,
-    },
+    Cast { expr: Box<Expr>, to: DataType },
 }
 
 impl Expr {
@@ -121,32 +108,19 @@ impl Expr {
     }
 
     pub fn bin(op: BinaryOp, left: Expr, right: Expr) -> Self {
-        Expr::Binary {
-            op,
-            left: Box::new(left),
-            right: Box::new(right),
-        }
+        Expr::Binary { op, left: Box::new(left), right: Box::new(right) }
     }
 
     pub fn unary(op: UnaryOp, expr: Expr) -> Self {
-        Expr::Unary {
-            op,
-            expr: Box::new(expr),
-        }
+        Expr::Unary { op, expr: Box::new(expr) }
     }
 
     pub fn call<N: Into<String>>(name: N, args: Vec<Expr>) -> Self {
-        Expr::Call {
-            name: name.into(),
-            args,
-        }
+        Expr::Call { name: name.into(), args }
     }
 
     pub fn cast(self, to: DataType) -> Self {
-        Expr::Cast {
-            expr: Box::new(self),
-            to,
-        }
+        Expr::Cast { expr: Box::new(self), to }
     }
 
     pub fn children(&self) -> Vec<&Expr> {
@@ -197,9 +171,7 @@ pub struct SchemaContext {
 
 impl SchemaContext {
     pub fn new() -> Self {
-        Self {
-            columns: Default::default(),
-        }
+        Self { columns: Default::default() }
     }
 
     pub fn with_column<S: Into<String>>(mut self, name: S, dt: DataType) -> Self {
@@ -221,10 +193,9 @@ impl Default for SchemaContext {
 impl Expr {
     pub fn infer_type(&self, schema: &SchemaContext) -> Result<DataType, TypeError> {
         match self {
-            Expr::Column(name) => schema
-                .lookup(name)
-                .cloned()
-                .ok_or_else(|| TypeError::UnknownColumn(name.clone())),
+            Expr::Column(name) => {
+                schema.lookup(name).cloned().ok_or_else(|| TypeError::UnknownColumn(name.clone()))
+            }
 
             Expr::Literal(l) => match l {
                 Literal::I8(_) => Ok(DataType::I8),
@@ -271,10 +242,7 @@ impl Expr {
                         (DataType::F32, _) | (_, DataType::F32) => Ok(DataType::F32),
                         (DataType::I64, DataType::I64) => Ok(DataType::I64),
                         (DataType::I32, DataType::I32) => Ok(DataType::I32),
-                        _ => Err(TypeError::TypeMismatch {
-                            expected: lt,
-                            got: rt,
-                        }),
+                        _ => Err(TypeError::TypeMismatch { expected: lt, got: rt }),
                     },
                     Eq | NotEq | Lt | LtEq | Gt | GtEq => Ok(DataType::Bool),
                     And | Or => {
@@ -396,9 +364,7 @@ impl ToNvrtc for Expr {
 
 /// Helpers
 fn sanitize_ident(s: &str) -> String {
-    s.chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect()
+    s.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect()
 }
 
 fn escape_c_string(s: &str) -> String {
@@ -407,11 +373,7 @@ fn escape_c_string(s: &str) -> String {
 
 pub fn float_literal_to_str<T: Into<f64> + Copy + PartialEq>(f: T) -> String {
     let f64_val = f.into();
-    if f64_val.fract() == 0.0 {
-        format!("{}.0", f64_val)
-    } else {
-        format!("{}", f64_val)
-    }
+    if f64_val.fract() == 0.0 { format!("{}.0", f64_val) } else { format!("{}", f64_val) }
 }
 
 impl fmt::Display for Expr {

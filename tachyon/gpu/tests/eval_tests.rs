@@ -59,11 +59,7 @@ macro_rules! test_eval_kernel_fn {
             let input = vec![&a_vec, &b_vec];
             let res = cuda_launcher::launch::<$data_type>(&input);
 
-            assert!(
-                res.is_ok(),
-                "CUDA kernel launch failed for {}",
-                $operation_name
-            );
+            assert!(res.is_ok(), "CUDA kernel launch failed for {}", $operation_name);
 
             let output = res.unwrap();
             assert_eq!(output.len(), 1, "Expected 1 output vector");
@@ -79,11 +75,7 @@ macro_rules! test_eval_kernel_fn {
             for i in 0..$size {
                 let expected = $verify_fn(a_vec[i], b_vec[i]);
                 let actual = output[0][i];
-                let diff = if expected > actual {
-                    expected - actual
-                } else {
-                    actual - expected
-                };
+                let diff = if expected > actual { expected - actual } else { actual - expected };
 
                 assert!(
                     diff <= $epsilon as $data_type,

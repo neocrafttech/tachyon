@@ -30,19 +30,11 @@ fn get_arch_flag(device: i32) -> Result<String, String> {
     let mut minor: i32 = 0;
     unsafe {
         check_cuda(
-            cuDeviceGetAttribute(
-                &mut major,
-                CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
-                device,
-            ),
+            cuDeviceGetAttribute(&mut major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, device),
             "Failed to get compute capability major",
         )?;
         check_cuda(
-            cuDeviceGetAttribute(
-                &mut minor,
-                CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
-                device,
-            ),
+            cuDeviceGetAttribute(&mut minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, device),
             "Failed to get compute capability minor",
         )?;
     }
@@ -84,9 +76,7 @@ extern "C" __global__ void {kernel_name}(
 }
 
 fn build_or_load_kernel(
-    kernel_source: &str,
-    kernel_name: &str,
-    device: i32,
+    kernel_source: &str, kernel_name: &str, device: i32,
 ) -> Result<*const std::ffi::c_void, String> {
     let src = CString::new(kernel_source).unwrap();
     let name = CString::new(kernel_name).unwrap();
@@ -94,14 +84,7 @@ fn build_or_load_kernel(
     let mut prog: *mut std::ffi::c_void = ptr::null_mut();
     unsafe {
         check_nvrtc(
-            nvrtcCreateProgram(
-                &mut prog,
-                src.as_ptr(),
-                name.as_ptr(),
-                0,
-                ptr::null(),
-                ptr::null(),
-            ),
+            nvrtcCreateProgram(&mut prog, src.as_ptr(), name.as_ptr(), 0, ptr::null(), ptr::null()),
             "Failed to create NVRTC program",
             prog,
         )?;
@@ -110,10 +93,8 @@ fn build_or_load_kernel(
     println!("Compiling kernel to CUBIN (fat binary)...");
 
     let arch_flag = get_arch_flag(device)?;
-    let arch_options = [
-        CString::new(arch_flag.as_str()).unwrap(),
-        CString::new("--std=c++20").unwrap(),
-    ];
+    let arch_options =
+        [CString::new(arch_flag.as_str()).unwrap(), CString::new("--std=c++20").unwrap()];
     let arch_ptrs: Vec<*const i8> = arch_options.iter().map(|s| s.as_ptr()).collect();
 
     unsafe {
@@ -129,11 +110,7 @@ fn build_or_load_kernel(
     // Get CUBIN (compiled binary)
     let mut cubin_size: usize = 0;
     unsafe {
-        check_nvrtc(
-            nvrtcGetCUBINSize(prog, &mut cubin_size),
-            "Failed to get CUBIN size",
-            prog,
-        )?;
+        check_nvrtc(nvrtcGetCUBINSize(prog, &mut cubin_size), "Failed to get CUBIN size", prog)?;
     }
 
     println!("CUBIN size: {} bytes", cubin_size);
@@ -151,10 +128,7 @@ fn build_or_load_kernel(
     // Create context
     let mut context: *mut std::ffi::c_void = ptr::null_mut();
     unsafe {
-        check_cuda(
-            cuCtxCreate_v2(&mut context, 0, device),
-            "Failed to create context",
-        )?;
+        check_cuda(cuCtxCreate_v2(&mut context, 0, device), "Failed to create context")?;
     }
 
     println!("Loading CUBIN module...");
@@ -182,8 +156,7 @@ fn build_or_load_kernel(
 }
 
 fn launch_kernel(
-    kernel: *const std::ffi::c_void,
-    (d_a, d_b, d_c, n): (u64, u64, u64, usize),
+    kernel: *const std::ffi::c_void, (d_a, d_b, d_c, n): (u64, u64, u64, usize),
 ) -> Result<(), String> {
     let mut args = [
         &d_a as *const u64 as *mut std::ffi::c_void,
@@ -193,10 +166,7 @@ fn launch_kernel(
     ];
     let block_size = 256;
     let grid_size = n.div_ceil(block_size);
-    println!(
-        "Launching kernel with grid size {} and block size {}",
-        grid_size, block_size
-    );
+    println!("Launching kernel with grid size {} and block size {}", grid_size, block_size);
     unsafe {
         check_cuda(
             cuLaunchKernel(
@@ -242,20 +212,13 @@ where
 
     launch_kernel(
         kernel,
-        (
-            dm_a.device_ptr() as u64,
-            dm_b.device_ptr() as u64,
-            dm_c.device_ptr() as u64,
-            n,
-        ),
+        (dm_a.device_ptr() as u64, dm_b.device_ptr() as u64, dm_c.device_ptr() as u64, n),
     )?;
 
     let error = unsafe { cudaGetLastError() };
     check_cuda(error, "Failed to get last error")?;
 
-    let host_vec = dm_c
-        .to_vec()
-        .map_err(|e| format!("Failed to copy data from device: {}", e))?;
+    let host_vec = dm_c.to_vec().map_err(|e| format!("Failed to copy data from device: {}", e))?;
 
     Ok(vec![host_vec])
 }

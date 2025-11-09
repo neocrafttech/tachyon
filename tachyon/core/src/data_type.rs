@@ -34,17 +34,11 @@ impl DataType {
     }
 
     pub fn is_signed(&self) -> bool {
-        matches!(
-            self,
-            DataType::I8 | DataType::I16 | DataType::I32 | DataType::I64
-        )
+        matches!(self, DataType::I8 | DataType::I16 | DataType::I32 | DataType::I64)
     }
 
     pub fn is_unsigned(&self) -> bool {
-        matches!(
-            self,
-            DataType::U8 | DataType::U16 | DataType::U32 | DataType::U64
-        )
+        matches!(self, DataType::U8 | DataType::U16 | DataType::U32 | DataType::U64)
     }
 
     pub fn is_integer(&self) -> bool {
