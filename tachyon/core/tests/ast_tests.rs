@@ -14,9 +14,9 @@ fn infer_and_codegen_simple() {
         .with_column("flag", DataType::Bool);
 
     // expr: (a * 2.5) + (b as double)
-    let expr = Expr::bin(
+    let expr = Expr::binary(
         BinaryOp::Add,
-        Expr::bin(BinaryOp::Mul, Expr::col("a"), Expr::f32(2.5)),
+        Expr::binary(BinaryOp::Mul, Expr::col("a"), Expr::f32(2.5)),
         Expr::col("b").cast(DataType::F64),
     );
 
@@ -38,13 +38,11 @@ fn c_type_mapping() {
 
 #[test]
 fn unary_neg_and_not() {
-    // Negation on numeric types
     let expr_neg = Expr::unary(UnaryOp::Neg, Expr::i32(10));
     let schema = SchemaContext::new();
     let inferred = expr_neg.infer_type(&schema).unwrap();
     assert_eq!(inferred, DataType::I32);
 
-    // Boolean NOT
     let schema = SchemaContext::new().with_column("flag", DataType::Bool);
     let expr_not = Expr::unary(UnaryOp::Not, Expr::col("flag"));
     let inferred = expr_not.infer_type(&schema).unwrap();
@@ -79,7 +77,7 @@ fn float_literal_str() {
 #[test]
 fn bool_ops() {
     let schema = SchemaContext::new().with_column("flag", DataType::Bool);
-    let e = Expr::bin(BinaryOp::And, Expr::col("flag"), Expr::bool_lit(true));
+    let e = Expr::binary(BinaryOp::And, Expr::col("flag"), Expr::bool_lit(true));
     let ty = e.infer_type(&schema).unwrap();
     assert_eq!(ty, DataType::Bool);
 }

@@ -29,6 +29,7 @@ setup_rust(){
 }
 
 setup_cuda(){
+    sudo apt install clang-format
 	wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
 	sudo dpkg -i cuda-keyring_1.1-1_all.deb
 	sudo apt-get update
@@ -40,7 +41,7 @@ setup() {
     setup_cuda
 }
 
-check() {
+check_rust() {
     echo "[INFO] Running cargo check..."
     cargo check
     echo "[OK] Cargo check passed!"
@@ -52,6 +53,37 @@ check() {
     echo "[INFO] Running clippy lints..."
     cargo clippy -- -D warnings
     echo "[OK] Clippy checks passed!"
+}
+
+check_cpp() {
+    echo "[INFO] Checking CPP"
+    files=$(find . -type f \( -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" -o -name "*.hpp" -o -name "*.h" -o -name "*.cu" -o -name "*.cuh" \))
+    if [ -z "$files" ]; then
+        echo "No C++ files to check."
+        exit 0
+    fi
+    echo "$files"
+
+    set +e
+    unformatted=$(clang-format --dry-run --Werror $files 2>&1)
+    status=$?
+    set -e
+
+    echo "$unformatted"
+    if [ $status -ne 0 ]; then
+        echo "[ERROR] Formatting errors found in the following files:"
+        echo "$unformatted"
+        echo ""
+        echo "Run the following to fix formatting:"
+        echo "clang-format -i $files"
+        exit 1
+    fi
+    echo "[OK] CPP check passed!"
+}
+
+check() {
+    check_rust
+    check_cpp
 }
 
 build() {

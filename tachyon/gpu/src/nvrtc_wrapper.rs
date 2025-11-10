@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) NeoCraft Technologies.
+ *
+ * This source code is licensed under the Apache License, Version 2.0,
+ * as found in the LICENSE file in the root directory of this source tree.
+ */
+
 use crate::ffi::nvrtc::*;
 use std::ffi::CString;
 use std::ffi::c_char;
@@ -19,18 +26,13 @@ pub enum NvrtcError {
 }
 
 pub fn compile_cuda_file_to_fatbin<P: AsRef<Path>>(
-    path: P,
-    arch: &str,
+    path: P, arch: &str,
 ) -> Result<String, NvrtcError> {
     let src = fs::read_to_string(path.as_ref())?;
     let src_c = CString::new(src).unwrap();
-    let name_c = CString::new(
-        path.as_ref()
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("kernel.cu"),
-    )
-    .unwrap();
+    let name_c =
+        CString::new(path.as_ref().file_name().and_then(|s| s.to_str()).unwrap_or("kernel.cu"))
+            .unwrap();
 
     let arch_flag = format!("--gpu-architecture={}", arch);
     let opts = vec![

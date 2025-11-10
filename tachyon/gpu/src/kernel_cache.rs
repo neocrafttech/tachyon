@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) NeoCraft Technologies.
+ *
+ * This source code is licensed under the Apache License, Version 2.0,
+ * as found in the LICENSE file in the root directory of this source tree.
+ */
+
 use crate::nvrtc_wrapper::compile_cuda_file_to_fatbin;
 use sha2::{Digest, Sha256};
 use std::env;
@@ -42,8 +49,7 @@ fn get_cache_dir() -> PathBuf {
 
 /// Given a CUDA file and target arch, either load from cache or compile anew.
 pub fn load_or_compile_kernel<P: AsRef<Path>>(
-    path: P,
-    arch: &str,
+    path: P, arch: &str,
 ) -> Result<PathBuf, KernelCacheError> {
     let path = path.as_ref();
     let hash = compute_source_hash(path)?;

@@ -17,6 +17,10 @@ runs:
           run: rustup component add rustfmt clippy
           shell: bash
 
+        - name: Install CPP components
+          run: apt install -y clang-format
+          shell: bash
+
         - name: Cache rust packages
           if: ${{ !env.ACT }}
           uses: swatinem/rust-cache@v2.7.7

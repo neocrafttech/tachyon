@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) NeoCraft Technologies.
+ *
+ * This source code is licensed under the Apache License, Version 2.0,
+ * as found in the LICENSE file in the root directory of this source tree.
+ */
+
 use crate::cuda_type::CudaType;
 use crate::ffi::cuda_runtime::*;
 use crate::ffi::memory::*;
@@ -58,18 +65,17 @@ fn compose_kernel_source<T: CudaType>() -> Result<(String, String), String> {
         typedef unsigned int uint32_t;
         typedef long long int64_t;
         typedef unsigned long long uint64_t;
-extern "C" __global__ void {kernel_name}(
-    {type_name}* a,
-    {type_name}* b,
-    {type_name}* c,
-    int n
-) {{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < n) {{
-        c[idx] = a[idx] + b[idx];
-    }}
-}}
-"#
+        extern "C" __global__ void {kernel_name}(
+        {type_name}* a,
+        {type_name}* b,
+        {type_name}* c,
+        int n){{
+            int idx = blockIdx.x * blockDim.x + threadIdx.x;
+            if (idx < n) {{
+                c[idx] = a[idx] + b[idx];
+            }}
+        }}
+        "#
     );
 
     Ok((kernel_source, kernel_name))

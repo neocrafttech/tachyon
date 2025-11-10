@@ -1,5 +1,55 @@
+/*
+ * Copyright (c) NeoCraft Technologies.
+ *
+ * This source code is licensed under the Apache License, Version 2.0,
+ * as found in the LICENSE file in the root directory of this source tree.
+ */
+
 use crate::data_type::DataType;
 use std::fmt;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperationType {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    NotEq,
+    Lt,
+    LtEq,
+    Gt,
+    GtEq,
+    And,
+    Or,
+    Neg,
+    Not,
+    Cast,
+    Call,
+}
+
+impl From<&str> for OperationType {
+    fn from(op: &str) -> Self {
+        match op.to_lowercase().as_str() {
+            "+" | "add" => OperationType::Add,
+            "-" | "sub" => OperationType::Sub,
+            "*" | "mul" | "multiply" => OperationType::Mul,
+            "/" | "div" | "divide" => OperationType::Div,
+            "==" | "=" | "eq" => OperationType::Eq,
+            "<" | "lt" => OperationType::Lt,
+            "!=" => OperationType::NotEq,
+            "<=" | "lte" => OperationType::LtEq,
+            ">" | "gt" => OperationType::Gt,
+            ">=" | "gte" => OperationType::GtEq,
+            "&&" | "and" => OperationType::And,
+            "||" | "or" => OperationType::Or,
+            "neg" => OperationType::Neg,
+            "!" | "not" => OperationType::Not,
+            "cast" => OperationType::Cast,
+            _ => OperationType::Call,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinaryOp {
@@ -107,7 +157,7 @@ impl Expr {
         Expr::Literal(Literal::Bool(b))
     }
 
-    pub fn bin(op: BinaryOp, left: Expr, right: Expr) -> Self {
+    pub fn binary(op: BinaryOp, left: Expr, right: Expr) -> Self {
         Expr::Binary { op, left: Box::new(left), right: Box::new(right) }
     }
 
@@ -283,7 +333,6 @@ impl Expr {
             }
 
             Expr::Cast { expr, to } => {
-                // very permissive cast for now
                 let _ = expr.infer_type(schema)?;
                 Ok(to.clone())
             }
@@ -362,7 +411,6 @@ impl ToNvrtc for Expr {
     }
 }
 
-/// Helpers
 fn sanitize_ident(s: &str) -> String {
     s.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect()
 }
