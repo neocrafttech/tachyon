@@ -12,3 +12,4 @@ rust-version.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+half.workspace = true

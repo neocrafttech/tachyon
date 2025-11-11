@@ -6,7 +6,8 @@
  */
 
 use crate::data_type::DataType;
-use crate::expr::{BINARY_OP_MAP, Expr, Literal, OperationType, UNARY_OP_MAP};
+use crate::expr::{Expr, Literal};
+use crate::operator::Operator;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
@@ -319,40 +320,35 @@ impl Parser {
         }
 
         self.expect(Token::CloseParen)?;
-        let op_type = OperationType::from(op.as_str());
+        let op_type = Operator::from(op.as_str());
 
         match op_type {
-            OperationType::Add
-            | OperationType::Sub
-            | OperationType::Mul
-            | OperationType::Div
-            | OperationType::Eq
-            | OperationType::NotEq
-            | OperationType::Lt
-            | OperationType::LtEq
-            | OperationType::Gt
-            | OperationType::GtEq
-            | OperationType::And
-            | OperationType::Or => {
+            Operator::Add
+            | Operator::Sub
+            | Operator::Mul
+            | Operator::Div
+            | Operator::Eq
+            | Operator::NotEq
+            | Operator::Lt
+            | Operator::LtEq
+            | Operator::Gt
+            | Operator::GtEq
+            | Operator::And
+            | Operator::Or => {
                 if args.len() != 2 {
                     Err(ParseError::WrongArity { op: op.clone(), expected: 2, got: args.len() })?;
                 }
-                let bin_op = BINARY_OP_MAP
-                    .get(&op_type)
-                    .ok_or(ParseError::UnknownOperator(op.as_str().to_string()))?;
-                Ok(Expr::binary(bin_op.clone(), args.remove(0), args.remove(0)))
+
+                Ok(Expr::binary(op_type, args.remove(0), args.remove(0)))
             }
-            OperationType::Neg | OperationType::Not => {
+            Operator::Neg | Operator::Not => {
                 if args.len() != 1 {
                     Err(ParseError::WrongArity { op: op.clone(), expected: 1, got: args.len() })?;
                 }
-                let uni_op = UNARY_OP_MAP
-                    .get(&op_type)
-                    .ok_or(ParseError::UnknownOperator(op.as_str().to_string()))?;
-                Ok(Expr::unary(uni_op.clone(), args.remove(0)))
+                Ok(Expr::unary(op_type, args.remove(0)))
             }
 
-            OperationType::Cast => {
+            Operator::Cast => {
                 if args.len() != 2 {
                     return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
                 }
@@ -369,8 +365,8 @@ impl Parser {
                         "u64" => DataType::U64,
                         "f32" => DataType::F32,
                         "f64" => DataType::F64,
-                        "bool" => DataType::Bool,
-                        "utf8" | "string" => DataType::Utf8,
+                        "bool" => DataType::BOOL,
+                        "utf8" | "string" => DataType::STR,
                         _ => return Err(ParseError::InvalidLiteral(type_name)),
                     };
                     Ok(args.remove(0).cast(data_type))

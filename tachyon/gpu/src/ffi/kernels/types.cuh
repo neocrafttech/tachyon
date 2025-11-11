@@ -38,6 +38,7 @@ enum class TypeKind : uint8_t {
   FLOAT16,
   FLOAT32,
   FLOAT64,
+  STRING,
 };
 
 namespace std {

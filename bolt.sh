@@ -2,6 +2,9 @@
 set -e
 
 setup_rust(){
+    echo "[INFO] Installing build essential"
+    sudo apt-get install -y build-essential
+
     echo "[INFO] Checking Rust installation..."
     if command -v rustc >/dev/null 2>&1; then
         CURRENT_VERSION=$(rustc --version | awk '{print $2}')
@@ -25,6 +28,7 @@ setup_rust(){
     if ! cargo nextest --version >/dev/null 2>&1; then
         cargo install cargo-nextest
     fi
+    export PATH="$HOME/.cargo/bin:$PATH" 
     cargo nextest --version
 }
 

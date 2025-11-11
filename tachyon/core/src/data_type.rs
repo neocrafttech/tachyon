@@ -20,8 +20,8 @@ pub enum DataType {
     F16,
     F32,
     F64,
-    Bool,
-    Utf8,
+    BOOL,
+    STR,
 }
 
 impl DataType {
@@ -39,8 +39,27 @@ impl DataType {
             DataType::F16 => "float16",
             DataType::F32 => "float",
             DataType::F64 => "double",
-            DataType::Bool => "bool",
-            DataType::Utf8 => "uint8_t",
+            DataType::BOOL => "bool",
+            DataType::STR => "uint8_t",
+        }
+    }
+
+    pub fn kernel_type(&self) -> &'static str {
+        match self {
+            DataType::I8 => "INT8",
+            DataType::I16 => "INT16",
+            DataType::I32 => "INT32",
+            DataType::I64 => "INT64",
+            DataType::U8 => "UINT8",
+            DataType::U16 => "UINT16",
+            DataType::U32 => "UINT32",
+            DataType::U64 => "UINT64",
+            DataType::BF16 => "BFLOAT16",
+            DataType::F16 => "FLOAT16",
+            DataType::F32 => "FLOAT32",
+            DataType::F64 => "FLOAT64",
+            DataType::BOOL => "BOOL",
+            DataType::STR => "STRING",
         }
     }
 
@@ -89,10 +108,10 @@ impl DataType {
     }
 
     pub fn is_string(&self) -> bool {
-        matches!(self, DataType::Utf8)
+        matches!(self, DataType::STR)
     }
 
     pub fn is_boolean(&self) -> bool {
-        matches!(self, DataType::Bool)
+        matches!(self, DataType::BOOL)
     }
 }
