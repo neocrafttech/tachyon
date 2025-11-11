@@ -2,6 +2,9 @@
 set -e
 
 setup_rust(){
+    echo "[INFO] Installing build essential"
+    sudo apt-get install -y build-essential
+
     echo "[INFO] Checking Rust installation..."
     if command -v rustc >/dev/null 2>&1; then
         CURRENT_VERSION=$(rustc --version | awk '{print $2}')
@@ -25,16 +28,17 @@ setup_rust(){
     if ! cargo nextest --version >/dev/null 2>&1; then
         cargo install cargo-nextest
     fi
+    export PATH="$HOME/.cargo/bin:$PATH"
     cargo nextest --version
 }
 
 setup_cuda() {
-    sudo apt install clang-format
+    sudo apt-get -y install clang-format
 	wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
 	sudo dpkg -i cuda-keyring_1.1-1_all.deb
 	sudo apt-get update
 	sudo apt-get -y install cuda-toolkit-13-0
-	sudo apt-get install -y cuda-drivers
+	sudo apt-get -y install cuda-drivers
 }
 
 setup() {
@@ -99,13 +103,12 @@ build() {
 }
 
 test() {
-    echo "[INFO] Running CPU tests..."
-    cargo nextest run --no-default-features || return 1
-
     if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
         echo "[INFO] CUDA GPU detected — running GPU tests..."
-        cargo nextest run --features gpu || return 1
+        cargo nextest run --features gpu --test-threads=4 || return 1
     else
+        echo "[INFO] Running CPU tests..."
+        cargo nextest run --no-default-features --test-threads=4 || return 1
         echo "[WARN] CUDA GPU not detected — skipping GPU tests."
         echo "[INFO] (CUDA toolkit may be installed, but no working GPU/driver found)"
     fi

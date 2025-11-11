@@ -8,7 +8,9 @@
 use std::ffi::CString;
 use std::ptr;
 
-use crate::cuda_type::CudaType;
+use indoc::formatdoc;
+
+use crate::ffi::column::{Column, ColumnFFI};
 use crate::ffi::cuda_runtime::*;
 use crate::ffi::memory::*;
 use crate::ffi::nvrtc::*;
@@ -52,33 +54,21 @@ fn get_arch_flag(device: i32) -> Result<String, String> {
 }
 
 #[inline(always)]
-fn compose_kernel_source<T: CudaType>() -> Result<(String, String), String> {
-    let type_name = T::cuda_type_name();
-    let kernel_name = format!("add_vectors_{}", type_name.replace(" ", "_"));
+fn compose_kernel_source(code: &str) -> Result<(String, String), String> {
+    let kernel_name = "add_vectors_123".to_string();
 
-    let kernel_source = format!(
-        r#"
-        typedef char int8_t;
-        typedef unsigned char uint8_t;
-        typedef short int16_t;
-        typedef unsigned short uint16_t;
-        typedef int int32_t;
-        typedef unsigned int uint32_t;
-        typedef long long int64_t;
-        typedef unsigned long long uint64_t;
-        extern "C" __global__ void {kernel_name}(
-        {type_name}* a,
-        {type_name}* b,
-        {type_name}* c,
-        int n){{
-            int idx = blockIdx.x * blockDim.x + threadIdx.x;
-            if (idx < n) {{
-                c[idx] = a[idx] + b[idx];
-            }}
+    let kernel_source = formatdoc! {r#"
+        #include "types.cuh"
+        #include "column.cuh"
+        #include "context.cuh"
+        #include "math.cuh"
+        extern "C" __global__ void {kernel_name}(Context* ctx, Column* input, Column* output, size_t num_rows) {{
+            size_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
+            if (row_idx >= num_rows) return;
+
+            {code}
         }}
-        "#
-    );
-
+    "#};
     Ok((kernel_source, kernel_name))
 }
 
@@ -100,13 +90,17 @@ fn build_or_load_kernel(
     println!("Compiling kernel to CUBIN (fat binary)...");
 
     let arch_flag = get_arch_flag(device)?;
-    let arch_options =
-        [CString::new(arch_flag.as_str()).unwrap(), CString::new("--std=c++20").unwrap()];
-    let arch_ptrs: Vec<*const i8> = arch_options.iter().map(|s| s.as_ptr()).collect();
+
+    let kernel_dir = "/home/manish/tachyon/tachyon/gpu/src/ffi/kernels";
+    let include_dir = format!("-I{}", kernel_dir);
+    let options = [arch_flag.as_str(), "--std=c++20", &include_dir, "-I/usr/local/cuda/include"];
+
+    let c_options: Vec<CString> = options.iter().map(|s| CString::new(*s).unwrap()).collect();
+    let option_ptrs: Vec<*const i8> = c_options.iter().map(|s| s.as_ptr()).collect();
 
     unsafe {
         check_nvrtc(
-            nvrtcCompileProgram(prog, arch_ptrs.len() as i32, arch_ptrs.as_ptr()),
+            nvrtcCompileProgram(prog, option_ptrs.len() as i32, option_ptrs.as_ptr()),
             "Failed to compile kernel",
             prog,
         )?;
@@ -163,16 +157,16 @@ fn build_or_load_kernel(
 }
 
 fn launch_kernel(
-    kernel: *const std::ffi::c_void, (d_a, d_b, d_c, n): (u64, u64, u64, usize),
+    kernel: *const std::ffi::c_void, context_ptr: u64, input_ptr: u64, output_ptr: u64, size: usize,
 ) -> Result<(), String> {
     let mut args = [
-        &d_a as *const u64 as *mut std::ffi::c_void,
-        &d_b as *const u64 as *mut std::ffi::c_void,
-        &d_c as *const u64 as *mut std::ffi::c_void,
-        &n as *const usize as *mut std::ffi::c_void,
+        &context_ptr as *const u64 as *mut std::ffi::c_void,
+        &input_ptr as *const u64 as *mut std::ffi::c_void,
+        &output_ptr as *const u64 as *mut std::ffi::c_void,
+        &size as *const usize as *mut std::ffi::c_void,
     ];
     let block_size = 256;
-    let grid_size = n.div_ceil(block_size);
+    let grid_size = size.div_ceil(block_size);
     println!("Launching kernel with grid size {} and block size {}", grid_size, block_size);
     unsafe {
         check_cuda(
@@ -197,35 +191,49 @@ fn launch_kernel(
     Ok(())
 }
 
-pub fn launch<T>(input: &[&Vec<T>]) -> Result<Vec<Vec<T>>, String>
-where
-    T: CudaType,
-{
+pub fn launch(code: &str, input: &[Column], output: &[Column]) -> Result<(), String> {
     init_cuda()?;
     let device = get_device()?;
-    let (kernel_source, kernel_name) = compose_kernel_source::<T>()?;
+    let (kernel_source, kernel_name) = compose_kernel_source(code)?;
+    println!("{:#}", kernel_source);
     let kernel = build_or_load_kernel(&kernel_source, &kernel_name, device)?;
 
-    let h_a = &input[0];
-    let h_b = &input[1];
-    let n = h_a.len();
+    let input_ffi: Vec<ColumnFFI> = input.iter().map(|col| col.as_ffi_column()).collect();
+    let output_ffi: Vec<ColumnFFI> = output.iter().map(|col| col.as_ffi_column()).collect();
 
-    let dm_a = DeviceMemory::from_slice(h_a)
-        .map_err(|e| format!("Failed to allocate device memory for input A: {}", e))?;
-    let dm_b = DeviceMemory::from_slice(h_b)
-        .map_err(|e| format!("Failed to allocate device memory for input B: {}", e))?;
-    let dm_c = DeviceMemory::<T>::new(n)
-        .map_err(|e| format!("Failed to allocate device memory for output C: {}", e))?;
+    let host_ctx = ContextFFI { error_code: 0 };
+    let device_ctx = DeviceMemory::from_slice(&[host_ctx])
+        .map_err(|e| format!("Failed to allocate device memory for context: {}", e))?; //TODO: Make single value init
 
-    launch_kernel(
-        kernel,
-        (dm_a.device_ptr() as u64, dm_b.device_ptr() as u64, dm_c.device_ptr() as u64, n),
-    )?;
+    let dm_input = DeviceMemory::from_slice(&input_ffi)
+        .map_err(|e| format!("Failed to allocate device memory for input: {}", e))?;
 
+    let dm_output = DeviceMemory::from_slice(&output_ffi)
+        .map_err(|e| format!("Failed to allocate device memory for output: {}", e))?;
+
+    if !input.is_empty() {
+        launch_kernel(
+            kernel,
+            device_ctx.device_ptr() as u64,
+            dm_input.device_ptr() as u64,
+            dm_output.device_ptr() as u64,
+            input[0].num_rows,
+        )?;
+    }
     let error = unsafe { cudaGetLastError() };
     check_cuda(error, "Failed to get last error")?;
 
-    let host_vec = dm_c.to_vec().map_err(|e| format!("Failed to copy data from device: {}", e))?;
+    let host_ctx = device_ctx.to_vec::<ContextFFI>().unwrap();
 
-    Ok(vec![host_vec])
+    if host_ctx[0].error_code != 0 {
+        return Err(format!("CUDA error: {}", host_ctx[0].error_code));
+    }
+
+    Ok(())
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct ContextFFI {
+    pub error_code: u32,
 }

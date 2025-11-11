@@ -7,22 +7,7 @@
 
 #pragma once
 
-#include <cmath>
-#include <cstddef>
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
-#include <limits>
-
-typedef signed char int8_t;
-typedef unsigned char uint8_t;
-typedef short int16_t;
-typedef unsigned short uint16_t;
-typedef int int32_t;
-typedef unsigned int uint32_t;
-typedef long long int64_t;
-typedef unsigned long long uint64_t;
-typedef __nv_bfloat16 bfloat16;
-typedef __half float16;
+#include "limits.cuh"
 
 enum class TypeKind : uint8_t {
   BOOL,
@@ -38,120 +23,109 @@ enum class TypeKind : uint8_t {
   FLOAT16,
   FLOAT32,
   FLOAT64,
+  STRING,
 };
-
-namespace std {
-template <> class numeric_limits<bf16> {
-public:
-  static constexpr bool is_specialized = true;
-  static constexpr bfloat16 max() noexcept {
-    return __float2bfloat16(3.389531e38f);
-  }
-  static constexpr bfloat16 min() noexcept {
-    return __float2bfloat16(-3.389531e38f);
-  }
-  static constexpr bfloat16 lowest() noexcept {
-    return __float2bfloat16(-3.389531e38f);
-  }
-  static constexpr bfloat16 epsilon() noexcept {
-    return __float2bfloat16(0.0078125f);
-  }
-};
-template <> class numeric_limits<f16> {
-public:
-  static constexpr bool is_specialized = true;
-  static constexpr float16 max() noexcept { return __float2half(65504.0f); }
-  static constexpr float16 min() noexcept { return __float2half(-65504.0f); }
-  static constexpr float16 lowest() noexcept { return __float2half(-65504.0f); }
-  static constexpr float16 epsilon() noexcept {
-    return __float2half(0.00097656f);
-  }
-};
-} // namespace std
 
 template <TypeKind K> struct TypeTraits;
 
-#define DEFINE_TYPE_TRAITS(ENUM_VAL, CPP_TYPE, SIZE, IS_SIGNED, IS_FLOAT,      \
-                           MIN_EXPR, MAX_EXPR)                                 \
-  template <> struct TypeTraits<TypeKind::ENUM_VAL> {                          \
+#define DEFINE_TYPE(NAME, CPP_TYPE, SIZE, IS_SIGNED, IS_FLOAT, MIN_EXPR,       \
+                    MAX_EXPR)                                                  \
+  struct NAME {                                                                \
     using NativeType = CPP_TYPE;                                               \
-    static constexpr TypeKind kind = TypeKind::ENUM_VAL;                       \
+    NativeType value;                                                          \
+    bool valid = true;                                                         \
+    __host__ __device__ NAME() = default;                                      \
+    __host__ __device__ NAME(NativeType v) : value(v) {}                       \
+                                                                               \
+    static constexpr TypeKind kind = TypeKind::NAME;                           \
     static constexpr uint8_t size = SIZE;                                      \
     static constexpr bool is_signed = IS_SIGNED;                               \
     static constexpr bool is_floating = IS_FLOAT;                              \
     static constexpr bool is_integral = !IS_FLOAT;                             \
+                                                                               \
+    __host__ __device__ static constexpr CPP_TYPE min() { return MIN_EXPR; }   \
+    __host__ __device__ static constexpr CPP_TYPE max() { return MAX_EXPR; }   \
+                                                                               \
+    __host__ __device__ operator NativeType() const { return value; }          \
+  };                                                                           \
+                                                                               \
+  template <> struct TypeTraits<TypeKind::NAME> {                              \
+    using WrapperType = NAME;                                                  \
+    using NativeType = CPP_TYPE;                                               \
+    static constexpr TypeKind kind = TypeKind::NAME;                           \
+    static constexpr uint8_t size = SIZE;                                      \
+    static constexpr bool is_signed = IS_SIGNED;                               \
+    static constexpr bool is_floating = IS_FLOAT;                              \
     static constexpr unsigned int size_bytes = sizeof(CPP_TYPE);               \
-    NativeType value;                                                          \
-    __host__ __device__ static constexpr CPP_TYPE min_value() {                \
-      return MIN_EXPR;                                                         \
-    }                                                                          \
-    __host__ __device__ static constexpr CPP_TYPE max_value() {                \
-      return MAX_EXPR;                                                         \
-    }                                                                          \
+    __host__ __device__ static constexpr CPP_TYPE min() { return MIN_EXPR; }   \
+    __host__ __device__ static constexpr CPP_TYPE max() { return MAX_EXPR; }   \
   };
 
-DEFINE_TYPE_TRAITS(BOOL, bool, sizeof(bool), false, false, false, true)
-DEFINE_TYPE_TRAITS(INT8, int8_t, sizeof(int8_t), true, false,
-                   std::numeric_limits<int8_t>::min(),
-                   std::numeric_limits<int8_t>::max())
-DEFINE_TYPE_TRAITS(UINT8, uint8_t, sizeof(uint8_t), false, false,
-                   std::numeric_limits<uint8_t>::min(),
-                   std::numeric_limits<uint8_t>::max())
-DEFINE_TYPE_TRAITS(INT16, int16_t, sizeof(int16_t), true, false,
-                   std::numeric_limits<int16_t>::min(),
-                   std::numeric_limits<int16_t>::max())
-DEFINE_TYPE_TRAITS(UINT16, uint16_t, sizeof(uint16_t), false, false,
-                   std::numeric_limits<uint16_t>::min(),
-                   std::numeric_limits<uint16_t>::max())
-DEFINE_TYPE_TRAITS(INT32, int32_t, sizeof(int32_t), true, false,
-                   std::numeric_limits<int32_t>::min(),
-                   std::numeric_limits<int32_t>::max())
-DEFINE_TYPE_TRAITS(UINT32, uint32_t, sizeof(uint32_t), false, false,
-                   std::numeric_limits<uint32_t>::min(),
-                   std::numeric_limits<uint32_t>::max())
-DEFINE_TYPE_TRAITS(INT64, int64_t, sizeof(int64_t), true, false,
-                   std::numeric_limits<int64_t>::min(),
-                   std::numeric_limits<int64_t>::max())
-DEFINE_TYPE_TRAITS(UINT64, uint64_t, sizeof(uint64_t) false, false,
-                   std::numeric_limits<uint64_t>::min(),
-                   std::numeric_limits<uint64_t>::max())
-DEFINE_TYPE_TRAITS(BFLOAT16, bf16, sizeof(bfloat16), true, true,
-                   std::numeric_limits<bfloat16>::min(),
-                   std::numeric_limits<bfloat16>::max())
-DEFINE_TYPE_TRAITS(FLOAT16, f16, sizeof(float16), true, true,
-                   std::numeric_limits<float16>::min(),
-                   std::numeric_limits<float16>::max())
-DEFINE_TYPE_TRAITS(FLOAT32, float, sizeof(float), true, true,
-                   std::numeric_limits<float>::min(),
-                   std::numeric_limits<float>::max())
-DEFINE_TYPE_TRAITS(FLOAT64, double, sizeof(double), true, true,
-                   std::numeric_limits<double>::min(),
-                   std::numeric_limits<double>::max())
+DEFINE_TYPE(BOOL, bool, sizeof(bool), false, false, false, true)
+DEFINE_TYPE(INT8, int8_t, sizeof(int8_t), true, false,
+            std::numeric_limits<int8_t>::min(),
+            std::numeric_limits<int8_t>::max())
+DEFINE_TYPE(UINT8, uint8_t, sizeof(uint8_t), false, false,
+            std::numeric_limits<uint8_t>::min(),
+            std::numeric_limits<uint8_t>::max())
+DEFINE_TYPE(INT16, int16_t, sizeof(int16_t), true, false,
+            std::numeric_limits<int16_t>::min(),
+            std::numeric_limits<int16_t>::max())
+DEFINE_TYPE(UINT16, uint16_t, sizeof(uint16_t), false, false,
+            std::numeric_limits<uint16_t>::min(),
+            std::numeric_limits<uint16_t>::max())
+DEFINE_TYPE(INT32, int32_t, sizeof(int32_t), true, false,
+            std::numeric_limits<int32_t>::min(),
+            std::numeric_limits<int32_t>::max())
+DEFINE_TYPE(UINT32, uint32_t, sizeof(uint32_t), false, false,
+            std::numeric_limits<uint32_t>::min(),
+            std::numeric_limits<uint32_t>::max())
+DEFINE_TYPE(INT64, int64_t, sizeof(int64_t), true, false,
+            std::numeric_limits<int64_t>::min(),
+            std::numeric_limits<int64_t>::max())
+DEFINE_TYPE(UINT64, uint64_t, sizeof(uint64_t), false, false,
+            std::numeric_limits<uint64_t>::min(),
+            std::numeric_limits<uint64_t>::max())
+DEFINE_TYPE(BFLOAT16, bfloat16, sizeof(bfloat16), true, true,
+            std::numeric_limits<bfloat16>::min(),
+            std::numeric_limits<bfloat16>::max())
+DEFINE_TYPE(FLOAT16, float16, sizeof(float16), true, true,
+            std::numeric_limits<float16>::min(),
+            std::numeric_limits<float16>::max())
+DEFINE_TYPE(FLOAT32, float, sizeof(float), true, true,
+            std::numeric_limits<float>::min(),
+            std::numeric_limits<float>::max())
+DEFINE_TYPE(FLOAT64, double, sizeof(double), true, true,
+            std::numeric_limits<double>::min(),
+            std::numeric_limits<double>::max())
 
-#undef DEFINE_TYPE_TRAITS
+#undef DEFINE_TYPE
 
-template <TypeKind K> struct KindToType;
-
-#define DEFINE_KIND_TO_TYPE(ENUM_VAL, CPP_TYPE)                                \
-  template <> struct KindToType<TypeKind::ENUM_VAL> {                          \
-    using type = CPP_TYPE;                                                     \
+template <TypeKind K> struct KindToWrapper;
+#define DEFINE_KIND_MAPPING(ENUM_VAL)                                          \
+  template <> struct KindToWrapper<TypeKind::ENUM_VAL> {                       \
+    using type = ENUM_VAL;                                                     \
   };
 
-DEFINE_KIND_TO_TYPE(BOOL, bool)
-DEFINE_KIND_TO_TYPE(INT8, int8_t)
-DEFINE_KIND_TO_TYPE(UINT8, uint8_t)
-DEFINE_KIND_TO_TYPE(INT16, int16_t)
-DEFINE_KIND_TO_TYPE(UINT16, uint16_t)
-DEFINE_KIND_TO_TYPE(INT32, int32_t)
-DEFINE_KIND_TO_TYPE(UINT32, uint32_t)
-DEFINE_KIND_TO_TYPE(INT64, int64_t)
-DEFINE_KIND_TO_TYPE(UINT64, uint64_t)
-DEFINE_KIND_TO_TYPE(FLOAT32, float)
-DEFINE_KIND_TO_TYPE(FLOAT64, double)
+DEFINE_KIND_MAPPING(BOOL)
+DEFINE_KIND_MAPPING(INT8)
+DEFINE_KIND_MAPPING(UINT8)
+DEFINE_KIND_MAPPING(INT16)
+DEFINE_KIND_MAPPING(UINT16)
+DEFINE_KIND_MAPPING(INT32)
+DEFINE_KIND_MAPPING(UINT32)
+DEFINE_KIND_MAPPING(INT64)
+DEFINE_KIND_MAPPING(UINT64)
+DEFINE_KIND_MAPPING(BFLOAT16)
+DEFINE_KIND_MAPPING(FLOAT16)
+DEFINE_KIND_MAPPING(FLOAT32)
+DEFINE_KIND_MAPPING(FLOAT64)
 
-#undef DEFINE_KIND_TO_TYPE
+#undef DEFINE_KIND_MAPPING
 
-template <TypeKind K> using kind_to_type_t = typename KindToType<K>::type;
+template <TypeKind K> using kind_to_wrapper_t = typename KindToWrapper<K>::type;
+template <TypeKind K>
+using kind_to_native_t = typename KindToWrapper<K>::type::NativeType;
 
 struct TypeDescriptor {
   TypeKind kind;
@@ -163,35 +137,30 @@ struct TypeDescriptor {
                                                bool flt)
       : kind(k), size_bytes(sz), is_signed(sgn), is_floating(flt) {}
 
-  template <typename T>
+  template <TypeKind K>
   __host__ __device__ static constexpr TypeDescriptor from_type() {
-    return TypeDescriptor(TypeTraits<T>::kind, TypeTraits<T>::size_bytes,
-                          TypeTraits<T>::is_signed, TypeTraits<T>::is_floating);
+    return TypeDescriptor(TypeTraits<K>::kind, TypeTraits<K>::size_bytes,
+                          TypeTraits<K>::is_signed, TypeTraits<K>::is_floating);
   }
 };
 
 __constant__ const TypeDescriptor TYPE_DESCRIPTORS[] = {
-    TypeDescriptor::from_type<bool>(),     TypeDescriptor::from_type<int8_t>(),
-    TypeDescriptor::from_type<uint8_t>(),  TypeDescriptor::from_type<int16_t>(),
-    TypeDescriptor::from_type<uint16_t>(), TypeDescriptor::from_type<int32_t>(),
-    TypeDescriptor::from_type<uint32_t>(), TypeDescriptor::from_type<int64_t>(),
-    TypeDescriptor::from_type<uint64_t>(), TypeDescriptor::from_type<float>(),
-    TypeDescriptor::from_type<double>(),
+    TypeDescriptor::from_type<TypeKind::BOOL>(),
+    TypeDescriptor::from_type<TypeKind::INT8>(),
+    TypeDescriptor::from_type<TypeKind::UINT8>(),
+    TypeDescriptor::from_type<TypeKind::INT16>(),
+    TypeDescriptor::from_type<TypeKind::UINT16>(),
+    TypeDescriptor::from_type<TypeKind::INT32>(),
+    TypeDescriptor::from_type<TypeKind::UINT32>(),
+    TypeDescriptor::from_type<TypeKind::INT64>(),
+    TypeDescriptor::from_type<TypeKind::UINT64>(),
+    TypeDescriptor::from_type<TypeKind::BFLOAT16>(),
+    TypeDescriptor::from_type<TypeKind::FLOAT16>(),
+    TypeDescriptor::from_type<TypeKind::FLOAT32>(),
+    TypeDescriptor::from_type<TypeKind::FLOAT64>(),
 };
 
 __host__ __device__ inline const TypeDescriptor &
 get_type_descriptor(TypeKind kind) {
   return TYPE_DESCRIPTORS[static_cast<uint8_t>(kind)];
-}
-
-__host__ __device__ inline constexpr unsigned int type_size(TypeKind kind) {
-  const unsigned int sizes[] = {
-      sizeof(bool),     sizeof(int8_t),  sizeof(uint8_t),  sizeof(int16_t),
-      sizeof(uint16_t), sizeof(int32_t), sizeof(uint32_t), sizeof(int64_t),
-      sizeof(uint64_t), sizeof(float),   sizeof(double)};
-  return sizes[static_cast<uint8_t>(kind)];
-}
-
-__host__ __device__ inline constexpr bool is_numeric_type(TypeKind kind) {
-  return kind != TypeKind::BOOL;
 }

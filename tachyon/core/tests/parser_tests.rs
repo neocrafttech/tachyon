@@ -1,4 +1,5 @@
-use core::expr::{BinaryOp, Expr, UnaryOp};
+use core::expr::Expr;
+use core::operator::Operator;
 use core::parser::parse_scheme_expr;
 
 macro_rules! test_parser_matrix {
@@ -64,24 +65,24 @@ macro_rules! test_parser_matrix {
 test_parser_matrix!(
     Binary,
     [
-        (test_parse_add, "(+, i0, i1)", BinaryOp::Add),
-        (test_parse_sub, "(-, i0, i1)", BinaryOp::Sub),
-        (test_parse_mul, "(*, i0, i1)", BinaryOp::Mul),
-        (test_parse_div, "(/, i0, i1)", BinaryOp::Div),
-        (test_parse_eq, "(==, i0, i1)", BinaryOp::Eq),
-        (test_parse_neq, "(!=, i0, i1)", BinaryOp::NotEq),
-        (test_parse_lt, "(<, i0, i1)", BinaryOp::Lt),
-        (test_parse_lte, "(<=, i0, i1)", BinaryOp::LtEq),
-        (test_parse_gt, "(>, i0, i1)", BinaryOp::Gt),
-        (test_parse_gte, "(>=, i0, i1)", BinaryOp::GtEq),
-        (test_parse_and, "(&&, i0, i1)", BinaryOp::And),
-        (test_parse_or, "(||, i0, i1)", BinaryOp::Or),
+        (test_parse_add, "(+, i0, i1)", Operator::Add),
+        (test_parse_sub, "(-, i0, i1)", Operator::Sub),
+        (test_parse_mul, "(*, i0, i1)", Operator::Mul),
+        (test_parse_div, "(/, i0, i1)", Operator::Div),
+        (test_parse_eq, "(==, i0, i1)", Operator::Eq),
+        (test_parse_neq, "(!=, i0, i1)", Operator::NotEq),
+        (test_parse_lt, "(<, i0, i1)", Operator::Lt),
+        (test_parse_lte, "(<=, i0, i1)", Operator::LtEq),
+        (test_parse_gt, "(>, i0, i1)", Operator::Gt),
+        (test_parse_gte, "(>=, i0, i1)", Operator::GtEq),
+        (test_parse_and, "(&&, i0, i1)", Operator::And),
+        (test_parse_or, "(||, i0, i1)", Operator::Or),
     ]
 );
 
 test_parser_matrix!(
     Unary,
-    [(test_parse_neg, "(neg, i0)", UnaryOp::Neg), (test_parse_not, "(not, i0)", UnaryOp::Not),]
+    [(test_parse_neg, "(neg, i0)", Operator::Neg), (test_parse_not, "(not, i0)", Operator::Not),]
 );
 
 test_parser_matrix!(
@@ -92,7 +93,7 @@ test_parser_matrix!(
 #[test]
 fn test_nested() {
     let expr = parse_scheme_expr("(*, (+ , i0, 1), 2.5)").unwrap();
-    assert!(matches!(expr, Expr::Binary { op: BinaryOp::Mul, .. }));
+    assert!(matches!(expr, Expr::Binary { op: Operator::Mul, .. }));
 }
 
 #[test]
