@@ -16,6 +16,8 @@ pub enum DataType {
     U16,
     U32,
     U64,
+    BF16,
+    F16,
     F32,
     F64,
     Bool,
@@ -33,6 +35,8 @@ impl DataType {
             DataType::U16 => "uint16_t",
             DataType::U32 => "uint32_t",
             DataType::U64 => "uint64_t",
+            DataType::BF16 => "bfloat16",
+            DataType::F16 => "float16",
             DataType::F32 => "float",
             DataType::F64 => "double",
             DataType::Bool => "bool",
@@ -63,7 +67,7 @@ impl DataType {
     }
 
     pub fn is_float(&self) -> bool {
-        matches!(self, DataType::F32 | DataType::F64)
+        matches!(self, DataType::BF16 | DataType::F16 | DataType::F32 | DataType::F64)
     }
 
     pub fn is_numeric(&self) -> bool {
@@ -77,6 +81,8 @@ impl DataType {
                 | DataType::U16
                 | DataType::U32
                 | DataType::U64
+                | DataType::BF16
+                | DataType::F16
                 | DataType::F32
                 | DataType::F64
         )

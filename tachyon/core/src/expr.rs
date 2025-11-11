@@ -5,10 +5,13 @@
  * as found in the LICENSE file in the root directory of this source tree.
  */
 
-use crate::data_type::DataType;
+use std::collections::HashMap;
 use std::fmt;
+use std::sync::LazyLock;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use crate::data_type::DataType;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OperationType {
     Add,
     Sub,
@@ -27,6 +30,27 @@ pub enum OperationType {
     Cast,
     Call,
 }
+
+pub static BINARY_OP_MAP: LazyLock<HashMap<OperationType, BinaryOp>> = LazyLock::new(|| {
+    HashMap::from([
+        (OperationType::Add, BinaryOp::Add),
+        (OperationType::Sub, BinaryOp::Sub),
+        (OperationType::Mul, BinaryOp::Mul),
+        (OperationType::Div, BinaryOp::Div),
+        (OperationType::Eq, BinaryOp::Eq),
+        (OperationType::NotEq, BinaryOp::NotEq),
+        (OperationType::Lt, BinaryOp::Lt),
+        (OperationType::LtEq, BinaryOp::LtEq),
+        (OperationType::Gt, BinaryOp::Gt),
+        (OperationType::GtEq, BinaryOp::GtEq),
+        (OperationType::And, BinaryOp::And),
+        (OperationType::Or, BinaryOp::Or),
+    ])
+});
+
+pub static UNARY_OP_MAP: LazyLock<HashMap<OperationType, UnaryOp>> = LazyLock::new(|| {
+    HashMap::from([(OperationType::Neg, UnaryOp::Neg), (OperationType::Not, UnaryOp::Not)])
+});
 
 impl From<&str> for OperationType {
     fn from(op: &str) -> Self {
@@ -308,29 +332,32 @@ impl Expr {
                 }
             }
 
-            Expr::Call { name, args } => {
-                // primitive builtin handling (extend as needed)
-                match name.as_str() {
-                    "sqrt" => {
-                        if args.len() != 1 {
-                            return Err(TypeError::Unsupported("sqrt arity".into()));
-                        }
-                        let t = args[0].infer_type(schema)?;
-                        match t {
-                            DataType::F32 | DataType::F64 => Ok(t),
-                            DataType::I32 | DataType::I64 => Ok(DataType::F64),
-                            _ => Err(TypeError::Unsupported(format!("sqrt on {:?}", t))),
-                        }
+            Expr::Call { name, args } => match name.as_str() {
+                "sqrt" => {
+                    if args.len() != 1 {
+                        Err(TypeError::Unsupported("sqrt arity".into()))?;
                     }
-                    "upper" => {
-                        if args.len() != 1 {
-                            return Err(TypeError::Unsupported("upper arity".into()));
-                        }
-                        Ok(DataType::Utf8)
+                    let t = args[0].infer_type(schema)?;
+                    match t {
+                        DataType::F32 | DataType::F64 => Ok(t),
+                        DataType::I32 | DataType::I64 => Ok(DataType::F64),
+                        _ => Err(TypeError::Unsupported(format!("sqrt on {:?}", t))),
                     }
-                    _ => Err(TypeError::Unsupported(format!("unknown function {}", name))),
                 }
-            }
+                "lower" => {
+                    if args.len() != 1 {
+                        Err(TypeError::Unsupported("lower arity".into()))?;
+                    }
+                    Ok(DataType::Utf8)
+                }
+                "upper" => {
+                    if args.len() != 1 {
+                        Err(TypeError::Unsupported("upper arity".into()))?;
+                    }
+                    Ok(DataType::Utf8)
+                }
+                _ => Err(TypeError::Unsupported(format!("unknown function {}", name))),
+            },
 
             Expr::Cast { expr, to } => {
                 let _ = expr.infer_type(schema)?;
@@ -346,12 +373,10 @@ pub trait ToNvrtc {
 
 impl ToNvrtc for Expr {
     fn to_nvrtc(&self, schema: &SchemaContext) -> Result<String, TypeError> {
-        // Ensure type correctness early
         let _t = self.infer_type(schema)?;
 
         let res = match self {
             Expr::Column(name) => {
-                // assume columns are available as arrays like `col_<name>[i]`
                 format!("col_{}[i]", sanitize_ident(name))
             }
             Expr::Literal(l) => match l {

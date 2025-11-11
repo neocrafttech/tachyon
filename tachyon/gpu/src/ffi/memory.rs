@@ -5,12 +5,11 @@
  * as found in the LICENSE file in the root directory of this source tree.
  */
 
+use std::cell::RefCell;
 use std::clone::Clone;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 use std::ptr;
-
-use std::cell::RefCell;
 
 // FFI bindings
 pub type CudaError = i32;

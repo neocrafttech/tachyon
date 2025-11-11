@@ -5,12 +5,13 @@
  * as found in the LICENSE file in the root directory of this source tree.
  */
 
+use std::ffi::CString;
+use std::ptr;
+
 use crate::cuda_type::CudaType;
 use crate::ffi::cuda_runtime::*;
 use crate::ffi::memory::*;
 use crate::ffi::nvrtc::*;
-use std::ffi::CString;
-use std::ptr;
 
 #[inline(always)]
 fn init_cuda() -> Result<(), String> {

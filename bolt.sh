@@ -28,7 +28,7 @@ setup_rust(){
     cargo nextest --version
 }
 
-setup_cuda(){
+setup_cuda() {
     sudo apt install clang-format
 	wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
 	sudo dpkg -i cuda-keyring_1.1-1_all.deb
@@ -36,9 +36,15 @@ setup_cuda(){
 	sudo apt-get -y install cuda-toolkit-13-0
 	sudo apt-get install -y cuda-drivers
 }
+
 setup() {
     setup_rust
     setup_cuda
+}
+
+format() {
+    cargo +nightly fmt;
+    clang-format -i ./tachyon/gpu/src/ffi/kernels/*
 }
 
 check_rust() {
@@ -107,14 +113,20 @@ test() {
     echo "[OK] Testing completed!"
 }
 
+coverage(){
+    cargo llvm-cov --workspace --summary-only
+}
+
 help() {
-    echo "Usage: $0 [setup|check|build|deploy|all|help]"
+    echo "Usage: $0 [setup|format|check|build|test|coverage|all|help]"
     echo
     echo "Commands:"
     echo "  setup   - Install Rust and cargo-nextest"
+    echo "  format   - Format code"
     echo "  check   - Run cargo check, fmt, and clippy"
     echo "  build   - Only build the workspace (runs check first)"
     echo "  test    - Only run tests"
+    echo "  coverage - Run coverage"
     echo "  all     - Run check, build, and test"
     echo "  help    - Show this help message"
 }
@@ -125,6 +137,9 @@ main() {
         setup)
             setup
             ;;
+        format)
+            format
+            ;;
         check)
             check
             ;;
@@ -133,6 +148,9 @@ main() {
             ;;
         test)
             test
+            ;;
+        coverage)
+            coverage
             ;;
         all)
             setup

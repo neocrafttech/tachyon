@@ -6,7 +6,7 @@
  */
 
 use crate::data_type::DataType;
-use crate::expr::{BinaryOp, Expr, Literal, OperationType, UnaryOp};
+use crate::expr::{BINARY_OP_MAP, Expr, Literal, OperationType, UNARY_OP_MAP};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParseError {
@@ -319,92 +319,37 @@ impl Parser {
         }
 
         self.expect(Token::CloseParen)?;
+        let op_type = OperationType::from(op.as_str());
 
-        match OperationType::from(op.as_str()) {
-            OperationType::Add => {
+        match op_type {
+            OperationType::Add
+            | OperationType::Sub
+            | OperationType::Mul
+            | OperationType::Div
+            | OperationType::Eq
+            | OperationType::NotEq
+            | OperationType::Lt
+            | OperationType::LtEq
+            | OperationType::Gt
+            | OperationType::GtEq
+            | OperationType::And
+            | OperationType::Or => {
                 if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
+                    Err(ParseError::WrongArity { op: op.clone(), expected: 2, got: args.len() })?;
                 }
-                Ok(Expr::binary(BinaryOp::Add, args.remove(0), args.remove(0)))
+                let bin_op = BINARY_OP_MAP
+                    .get(&op_type)
+                    .ok_or(ParseError::UnknownOperator(op.as_str().to_string()))?;
+                Ok(Expr::binary(bin_op.clone(), args.remove(0), args.remove(0)))
             }
-            OperationType::Sub => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::Sub, args.remove(0), args.remove(0)))
-            }
-            OperationType::Mul => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::Mul, args.remove(0), args.remove(0)))
-            }
-            OperationType::Div => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::Div, args.remove(0), args.remove(0)))
-            }
-            OperationType::Eq => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::Eq, args.remove(0), args.remove(0)))
-            }
-            OperationType::NotEq => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::NotEq, args.remove(0), args.remove(0)))
-            }
-            OperationType::Lt => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::Lt, args.remove(0), args.remove(0)))
-            }
-            OperationType::LtEq => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::LtEq, args.remove(0), args.remove(0)))
-            }
-            OperationType::Gt => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::Gt, args.remove(0), args.remove(0)))
-            }
-            OperationType::GtEq => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::GtEq, args.remove(0), args.remove(0)))
-            }
-            OperationType::And => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::And, args.remove(0), args.remove(0)))
-            }
-            OperationType::Or => {
-                if args.len() != 2 {
-                    return Err(ParseError::WrongArity { op, expected: 2, got: args.len() });
-                }
-                Ok(Expr::binary(BinaryOp::Or, args.remove(0), args.remove(0)))
-            }
-
-            OperationType::Neg => {
+            OperationType::Neg | OperationType::Not => {
                 if args.len() != 1 {
-                    return Err(ParseError::WrongArity { op, expected: 1, got: args.len() });
+                    Err(ParseError::WrongArity { op: op.clone(), expected: 1, got: args.len() })?;
                 }
-                Ok(Expr::unary(UnaryOp::Neg, args.remove(0)))
-            }
-            OperationType::Not => {
-                if args.len() != 1 {
-                    return Err(ParseError::WrongArity { op, expected: 1, got: args.len() });
-                }
-                Ok(Expr::unary(UnaryOp::Not, args.remove(0)))
+                let uni_op = UNARY_OP_MAP
+                    .get(&op_type)
+                    .ok_or(ParseError::UnknownOperator(op.as_str().to_string()))?;
+                Ok(Expr::unary(uni_op.clone(), args.remove(0)))
             }
 
             OperationType::Cast => {

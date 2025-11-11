@@ -10,14 +10,15 @@
 #include "bitVector.cuh"
 #include "utils.cuh"
 
-struct Column {
+template <typename T> struct Column {
   void *data;
-  uint32_t *validity_bitmap;
+  T *validity_bitmap;
   TypeKind type;
   size_t size;
 
+  template <typename T>
   __host__ __device__ Column(void *data, TypeKind type, size_t size,
-                             uint32_t *bitVec = nullptr)
+                             T *bitVec = nullptr)
       : data(data), type(type), size(size), validity_bitmap(bitVec) {
     ASSERT(data != nullptr, "Column data pointer must not be null");
     ASSERT(size > 0, "Column size must be greater than zero");

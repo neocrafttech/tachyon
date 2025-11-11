@@ -9,7 +9,10 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cuda_bf16.h>
+#include <cuda_fp16.h>
 #include <limits>
+
 typedef signed char int8_t;
 typedef unsigned char uint8_t;
 typedef short int16_t;
@@ -18,6 +21,8 @@ typedef int int32_t;
 typedef unsigned int uint32_t;
 typedef long long int64_t;
 typedef unsigned long long uint64_t;
+typedef __nv_bfloat16 bfloat16;
+typedef __half float16;
 
 enum class TypeKind : uint8_t {
   BOOL,
@@ -29,9 +34,40 @@ enum class TypeKind : uint8_t {
   UINT32,
   INT64,
   UINT64,
+  BFLOAT16,
+  FLOAT16,
   FLOAT32,
   FLOAT64,
 };
+
+namespace std {
+template <> class numeric_limits<bf16> {
+public:
+  static constexpr bool is_specialized = true;
+  static constexpr bfloat16 max() noexcept {
+    return __float2bfloat16(3.389531e38f);
+  }
+  static constexpr bfloat16 min() noexcept {
+    return __float2bfloat16(-3.389531e38f);
+  }
+  static constexpr bfloat16 lowest() noexcept {
+    return __float2bfloat16(-3.389531e38f);
+  }
+  static constexpr bfloat16 epsilon() noexcept {
+    return __float2bfloat16(0.0078125f);
+  }
+};
+template <> class numeric_limits<f16> {
+public:
+  static constexpr bool is_specialized = true;
+  static constexpr float16 max() noexcept { return __float2half(65504.0f); }
+  static constexpr float16 min() noexcept { return __float2half(-65504.0f); }
+  static constexpr float16 lowest() noexcept { return __float2half(-65504.0f); }
+  static constexpr float16 epsilon() noexcept {
+    return __float2half(0.00097656f);
+  }
+};
+} // namespace std
 
 template <TypeKind K> struct TypeTraits;
 
@@ -79,6 +115,12 @@ DEFINE_TYPE_TRAITS(INT64, int64_t, sizeof(int64_t), true, false,
 DEFINE_TYPE_TRAITS(UINT64, uint64_t, sizeof(uint64_t) false, false,
                    std::numeric_limits<uint64_t>::min(),
                    std::numeric_limits<uint64_t>::max())
+DEFINE_TYPE_TRAITS(BFLOAT16, bf16, sizeof(bfloat16), true, true,
+                   std::numeric_limits<bfloat16>::min(),
+                   std::numeric_limits<bfloat16>::max())
+DEFINE_TYPE_TRAITS(FLOAT16, f16, sizeof(float16), true, true,
+                   std::numeric_limits<float16>::min(),
+                   std::numeric_limits<float16>::max())
 DEFINE_TYPE_TRAITS(FLOAT32, float, sizeof(float), true, true,
                    std::numeric_limits<float>::min(),
                    std::numeric_limits<float>::max())

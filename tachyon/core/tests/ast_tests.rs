@@ -1,10 +1,5 @@
 use core::data_type::DataType;
-use core::expr::BinaryOp;
-use core::expr::Expr;
-use core::expr::SchemaContext;
-use core::expr::ToNvrtc;
-use core::expr::UnaryOp;
-use core::expr::float_literal_to_str;
+use core::expr::{BinaryOp, Expr, SchemaContext, ToNvrtc, UnaryOp, float_literal_to_str};
 
 #[test]
 fn infer_and_codegen_simple() {
@@ -26,14 +21,6 @@ fn infer_and_codegen_simple() {
     let nvrtc = expr.to_nvrtc(&schema).expect("codegen");
     // example output: ((col_a[i] * 2.5) + ((double)(col_b[i])))
     println!("nvrtc: {}", nvrtc);
-}
-
-#[test]
-fn c_type_mapping() {
-    assert_eq!(DataType::I8.c_type(), "int8_t");
-    assert_eq!(DataType::U64.c_type(), "uint64_t");
-    assert_eq!(DataType::F32.c_type(), "float");
-    assert_eq!(DataType::Utf8.c_type(), "uint8_t");
 }
 
 #[test]

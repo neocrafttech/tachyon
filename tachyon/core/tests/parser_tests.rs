@@ -64,10 +64,10 @@ macro_rules! test_parser_matrix {
 test_parser_matrix!(
     Binary,
     [
-        (test_parser_add, "(+, i0, i1)", BinaryOp::Add),
-        (test_parser_sub, "(-, i0, i1)", BinaryOp::Sub),
-        (test_parser_mul, "(*, i0, i1)", BinaryOp::Mul),
-        (test_parser_div, "(/, i0, i1)", BinaryOp::Div),
+        (test_parse_add, "(+, i0, i1)", BinaryOp::Add),
+        (test_parse_sub, "(-, i0, i1)", BinaryOp::Sub),
+        (test_parse_mul, "(*, i0, i1)", BinaryOp::Mul),
+        (test_parse_div, "(/, i0, i1)", BinaryOp::Div),
         (test_parse_eq, "(==, i0, i1)", BinaryOp::Eq),
         (test_parse_neq, "(!=, i0, i1)", BinaryOp::NotEq),
         (test_parse_lt, "(<, i0, i1)", BinaryOp::Lt),
@@ -81,12 +81,12 @@ test_parser_matrix!(
 
 test_parser_matrix!(
     Unary,
-    [(test_parser_neg, "(neg, i0)", UnaryOp::Neg), (test_parser_not, "(not, i0)", UnaryOp::Not),]
+    [(test_parse_neg, "(neg, i0)", UnaryOp::Neg), (test_parse_not, "(not, i0)", UnaryOp::Not),]
 );
 
 test_parser_matrix!(
     Call,
-    [(test_parser_sqrt, "(sqrt, i0)", "sqrt"), (test_parser_upper, "(upper, i0)", "upper"),]
+    [(test_parse_sqrt, "(sqrt, i0)", "sqrt"), (test_parse_upper, "(upper, i0)", "upper"),]
 );
 
 #[test]
