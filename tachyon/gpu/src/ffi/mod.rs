@@ -5,6 +5,7 @@
  * as found in the LICENSE file in the root directory of this source tree.
  */
 
+pub mod column;
 pub(crate) mod cuda_runtime;
 #[allow(dead_code)]
 pub(crate) mod memory;
