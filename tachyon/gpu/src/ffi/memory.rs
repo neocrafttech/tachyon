@@ -6,7 +6,6 @@
  */
 
 use std::cell::RefCell;
-use std::clone::Clone;
 use std::ffi::c_void;
 use std::marker::PhantomData;
 use std::ptr;
@@ -38,14 +37,14 @@ unsafe extern "C" {
 }
 
 /// Trait for CUDA memory types
-pub trait CudaMemory<T: std::clone::Clone + Sized> {
+pub trait CudaMemory {
     /// Get the device pointer (always returns device memory pointer)
-    fn device_ptr(&self) -> *mut T;
+    fn device_ptr(&self) -> *mut c_void;
 
     /// Get the host pointer (returns valid host-accessible pointer)
     /// For DeviceMemory: creates staging buffer and copies data
     /// For ManagedMemory: returns same pointer
-    fn host_ptr(&mut self) -> Result<*mut T, CudaError>;
+    fn host_ptr(&mut self) -> Result<*mut c_void, CudaError>;
 
     /// Synchronize host pointer with device (copy device -> host)
     fn sync_host(&mut self) -> Result<(), CudaError>;
@@ -62,47 +61,47 @@ pub trait CudaMemory<T: std::clone::Clone + Sized> {
     }
 
     /// Copy data from host slice to device
-    fn copy_from_host(&mut self, host_data: &[T]) -> Result<(), CudaError>;
+    fn copy_from_host<T: Sized>(&mut self, host_data: &[T]) -> Result<(), CudaError>;
 
     /// Copy data from device to host slice
-    fn copy_to_host(&self, host_data: &mut [T]) -> Result<(), CudaError>;
+    fn copy_to_host<T: Sized>(&self, host_data: &mut [T]) -> Result<(), CudaError>;
 
     /// Create from host data (allocate + copy)
-    fn from_slice(host_data: &[T]) -> Result<Self, CudaError>
+    fn from_slice<T: Sized>(host_data: &[T]) -> Result<Self, CudaError>
     where
         Self: Sized;
 
     /// Copy all data to a new Vec on host
-    fn to_vec(&self) -> Result<Vec<T>, CudaError> {
-        let mut host_vec = vec![unsafe { std::mem::zeroed() }; self.len()];
+    fn to_vec<T: std::clone::Clone + Sized>(&self) -> Result<Vec<T>, CudaError> {
+        let mut host_vec =
+            vec![unsafe { std::mem::zeroed() }; self.len() / std::mem::size_of::<T>()];
         self.copy_to_host(&mut host_vec)?;
         Ok(host_vec)
     }
 }
 
 /// Device-only memory with lazy pinned staging buffer
-pub struct DeviceMemory<T> {
-    device_ptr: *mut T,
+pub struct DeviceMemory {
+    device_ptr: *mut c_void,
     len: usize,
     // Lazy-allocated pinned host staging buffer
-    staging_buffer: RefCell<Option<*mut T>>,
-    _phantom: PhantomData<T>,
+    staging_buffer: RefCell<Option<*mut c_void>>,
+    _phantom: PhantomData<c_void>,
 }
 
-impl<T> DeviceMemory<T> {
+impl DeviceMemory {
     pub fn new(len: usize) -> Result<Self, CudaError> {
         let mut ptr: *mut c_void = ptr::null_mut();
-        let size = len * std::mem::size_of::<T>();
 
         unsafe {
-            let err = cudaMalloc(&mut ptr as *mut *mut c_void, size);
+            let err = cudaMalloc(&mut ptr as *mut *mut c_void, len);
             if err != CUDA_SUCCESS {
                 return Err(err);
             }
         }
 
         Ok(DeviceMemory {
-            device_ptr: ptr as *mut T,
+            device_ptr: ptr,
             len,
             staging_buffer: RefCell::new(None),
             _phantom: PhantomData,
@@ -110,7 +109,7 @@ impl<T> DeviceMemory<T> {
     }
 
     /// Allocate staging buffer if not already allocated
-    fn ensure_staging_buffer(&self) -> Result<*mut T, CudaError> {
+    fn ensure_staging_buffer(&self) -> Result<*mut c_void, CudaError> {
         let mut staging = self.staging_buffer.borrow_mut();
 
         if let Some(ptr) = *staging {
@@ -119,18 +118,16 @@ impl<T> DeviceMemory<T> {
 
         // Allocate pinned host memory
         let mut ptr: *mut c_void = ptr::null_mut();
-        let size = self.len * std::mem::size_of::<T>();
 
         unsafe {
-            let err = cudaMallocHost(&mut ptr as *mut *mut c_void, size);
+            let err = cudaMallocHost(&mut ptr as *mut *mut c_void, self.len);
             if err != CUDA_SUCCESS {
                 return Err(err);
             }
         }
 
-        let typed_ptr = ptr as *mut T;
-        *staging = Some(typed_ptr);
-        Ok(typed_ptr)
+        *staging = Some(ptr);
+        Ok(ptr)
     }
 
     /// Free staging buffer if allocated
@@ -139,19 +136,19 @@ impl<T> DeviceMemory<T> {
 
         if let Some(ptr) = *staging {
             unsafe {
-                cudaFreeHost(ptr as *mut c_void);
+                cudaFreeHost(ptr);
             }
             *staging = None;
         }
     }
 }
 
-impl<T: std::clone::Clone> CudaMemory<T> for DeviceMemory<T> {
-    fn device_ptr(&self) -> *mut T {
+impl CudaMemory for DeviceMemory {
+    fn device_ptr(&self) -> *mut c_void {
         self.device_ptr
     }
 
-    fn host_ptr(&mut self) -> Result<*mut T, CudaError> {
+    fn host_ptr(&mut self) -> Result<*mut c_void, CudaError> {
         // Ensure staging buffer exists
         let host_ptr = self.ensure_staging_buffer()?;
 
@@ -163,13 +160,12 @@ impl<T: std::clone::Clone> CudaMemory<T> for DeviceMemory<T> {
 
     fn sync_host(&mut self) -> Result<(), CudaError> {
         let host_ptr = self.ensure_staging_buffer()?;
-        let size = self.len * std::mem::size_of::<T>();
 
         unsafe {
             let err = cudaMemcpyAsync(
-                host_ptr as *mut c_void,
-                self.device_ptr as *const c_void,
-                size,
+                host_ptr,
+                self.device_ptr,
+                self.len,
                 CUDA_MEMCPY_DEVICE_TO_HOST,
                 ptr::null_mut(), // default stream
             );
@@ -187,13 +183,11 @@ impl<T: std::clone::Clone> CudaMemory<T> for DeviceMemory<T> {
         // Only sync if staging buffer exists
         let staging = self.staging_buffer.borrow();
         if let Some(host_ptr) = *staging {
-            let size = self.len * std::mem::size_of::<T>();
-
             unsafe {
                 let err = cudaMemcpyAsync(
-                    self.device_ptr as *mut c_void,
-                    host_ptr as *const c_void,
-                    size,
+                    self.device_ptr,
+                    host_ptr,
+                    self.len,
                     CUDA_MEMCPY_HOST_TO_DEVICE,
                     ptr::null_mut(),
                 );
@@ -214,16 +208,15 @@ impl<T: std::clone::Clone> CudaMemory<T> for DeviceMemory<T> {
         self.len
     }
 
-    fn copy_from_host(&mut self, host_data: &[T]) -> Result<(), CudaError> {
-        if host_data.len() > self.len {
+    fn copy_from_host<T: Sized>(&mut self, host_data: &[T]) -> Result<(), CudaError> {
+        let size = std::mem::size_of_val(host_data);
+        if size > self.len {
             panic!("Host data size exceeds device memory capacity");
         }
 
-        let size = std::mem::size_of_val(host_data);
-
         unsafe {
             let err = cudaMemcpy(
-                self.device_ptr as *mut c_void,
+                self.device_ptr,
                 host_data.as_ptr() as *const c_void,
                 size,
                 CUDA_MEMCPY_HOST_TO_DEVICE,
@@ -237,12 +230,11 @@ impl<T: std::clone::Clone> CudaMemory<T> for DeviceMemory<T> {
         Ok(())
     }
 
-    fn copy_to_host(&self, host_data: &mut [T]) -> Result<(), CudaError> {
-        if host_data.len() < self.len {
+    fn copy_to_host<T: Sized>(&self, host_data: &mut [T]) -> Result<(), CudaError> {
+        let size = std::mem::size_of_val(host_data);
+        if size < self.len {
             panic!("Host buffer too small for device data");
         }
-
-        let size = self.len * std::mem::size_of::<T>();
 
         unsafe {
             let err = cudaMemcpy(
@@ -260,72 +252,68 @@ impl<T: std::clone::Clone> CudaMemory<T> for DeviceMemory<T> {
         Ok(())
     }
 
-    fn from_slice(host_data: &[T]) -> Result<Self, CudaError> {
-        let mut device_mem = Self::new(host_data.len())?;
+    fn from_slice<T: Sized>(host_data: &[T]) -> Result<Self, CudaError> {
+        let mut device_mem = Self::new(std::mem::size_of_val(host_data))?;
         device_mem.copy_from_host(host_data)?;
         Ok(device_mem)
     }
 }
 
-impl<T> Drop for DeviceMemory<T> {
+impl Drop for DeviceMemory {
     fn drop(&mut self) {
-        println!(
-            "Dropping DeviceMemory of type {} with size {}",
-            std::any::type_name::<T>(),
-            self.len
-        );
+        println!("Dropping DeviceMemory of type with size {}", self.len);
         // Free staging buffer first
         self.free_staging_buffer();
 
         // Free device memory
         unsafe {
-            cudaFree(self.device_ptr as *mut c_void);
+            cudaFree(self.device_ptr);
         }
     }
 }
 
-unsafe impl<T: Send> Send for DeviceMemory<T> {}
-unsafe impl<T: Sync> Sync for DeviceMemory<T> {}
-
 /// Managed/Unified memory - host_ptr returns same pointer
-pub struct ManagedMemory<T> {
-    ptr: *mut T,
+pub struct ManagedMemory {
+    ptr: *mut c_void,
     len: usize,
-    _phantom: PhantomData<T>,
+    _phantom: PhantomData<c_void>,
 }
 
-impl<T> ManagedMemory<T> {
+impl ManagedMemory {
     pub fn new(len: usize) -> Result<Self, CudaError> {
         let mut ptr: *mut c_void = ptr::null_mut();
-        let size = len * std::mem::size_of::<T>();
 
         unsafe {
-            let err = cudaMallocManaged(&mut ptr as *mut *mut c_void, size, CU_MEM_ATTACH_GLOBAL);
+            let err = cudaMallocManaged(&mut ptr as *mut *mut c_void, len, CU_MEM_ATTACH_GLOBAL);
             if err != CUDA_SUCCESS {
                 return Err(err);
             }
         }
 
-        Ok(ManagedMemory { ptr: ptr as *mut T, len, _phantom: PhantomData })
+        Ok(ManagedMemory { ptr, len, _phantom: PhantomData })
     }
 
     /// Direct access as slice (since managed memory is host-accessible)
-    pub fn as_slice(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    pub fn as_slice<T: Sized>(&self) -> &[T] {
+        unsafe {
+            std::slice::from_raw_parts(self.ptr as *const T, self.len / std::mem::size_of::<T>())
+        }
     }
 
     /// Direct mutable access as slice
-    pub fn as_slice_mut(&mut self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+    pub fn as_slice_mut<T: Sized>(&mut self) -> &mut [T] {
+        unsafe {
+            std::slice::from_raw_parts_mut(self.ptr as *mut T, self.len / std::mem::size_of::<T>())
+        }
     }
 }
 
-impl<T: Clone> CudaMemory<T> for ManagedMemory<T> {
-    fn device_ptr(&self) -> *mut T {
+impl CudaMemory for ManagedMemory {
+    fn device_ptr(&self) -> *mut c_void {
         self.ptr
     }
 
-    fn host_ptr(&mut self) -> Result<*mut T, CudaError> {
+    fn host_ptr(&mut self) -> Result<*mut c_void, CudaError> {
         // Same pointer for managed memory
         Ok(self.ptr)
     }
@@ -345,16 +333,15 @@ impl<T: Clone> CudaMemory<T> for ManagedMemory<T> {
         self.len
     }
 
-    fn copy_from_host(&mut self, host_data: &[T]) -> Result<(), CudaError> {
-        if host_data.len() > self.len {
+    fn copy_from_host<T: Sized>(&mut self, host_data: &[T]) -> Result<(), CudaError> {
+        let size = std::mem::size_of_val(host_data);
+        if size > self.len {
             panic!("Host data size exceeds memory capacity");
         }
 
-        let size = std::mem::size_of_val(host_data);
-
         unsafe {
             let err = cudaMemcpy(
-                self.ptr as *mut c_void,
+                self.ptr,
                 host_data.as_ptr() as *const c_void,
                 size,
                 CUDA_MEMCPY_HOST_TO_DEVICE,
@@ -368,8 +355,9 @@ impl<T: Clone> CudaMemory<T> for ManagedMemory<T> {
         Ok(())
     }
 
-    fn copy_to_host(&self, host_data: &mut [T]) -> Result<(), CudaError> {
-        if host_data.len() < self.len {
+    fn copy_to_host<T: Sized>(&self, host_data: &mut [T]) -> Result<(), CudaError> {
+        let size = std::mem::size_of_val(host_data);
+        if size < self.len {
             panic!("Host buffer too small");
         }
 
@@ -391,27 +379,18 @@ impl<T: Clone> CudaMemory<T> for ManagedMemory<T> {
         Ok(())
     }
 
-    fn from_slice(host_data: &[T]) -> Result<Self, CudaError> {
-        let mut managed_mem = Self::new(host_data.len())?;
+    fn from_slice<T: Sized>(host_data: &[T]) -> Result<Self, CudaError> {
+        let mut managed_mem = Self::new(std::mem::size_of_val(host_data))?;
         managed_mem.copy_from_host(host_data)?;
         Ok(managed_mem)
     }
 }
 
-impl<T> Drop for ManagedMemory<T> {
+impl Drop for ManagedMemory {
     fn drop(&mut self) {
-        println!(
-            "Dropping ManagedMemory of type {} with size {}",
-            std::any::type_name::<T>(),
-            self.len
-        );
+        println!("Dropping ManagedMemory with size {}", self.len);
         unsafe {
-            cudaFree(self.ptr as *mut c_void);
+            cudaFree(self.ptr);
         }
     }
 }
-
-unsafe impl<T: Send> Send for ManagedMemory<T> {}
-unsafe impl<T: Sync> Sync for ManagedMemory<T> {}
-
-// Add missing constants

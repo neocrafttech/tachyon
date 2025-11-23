@@ -12,3 +12,13 @@ rust-version.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+half.workspace = true
+gpu = { path = "../gpu" }
+
+[features]
+default = []
+gpu = []
+
+[dev-dependencies]
+rand.workspace = true
+arrow.workspace = true

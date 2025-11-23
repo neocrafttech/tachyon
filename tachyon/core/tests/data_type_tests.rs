@@ -15,8 +15,8 @@ macro_rules! matrix_test {
             DataType::F16,
             DataType::F32,
             DataType::F64,
-            DataType::Bool,
-            DataType::Utf8,
+            DataType::BOOL,
+            DataType::STR,
         ];
         for dtype in all_types {
             $test_fn(dtype);
@@ -41,8 +41,8 @@ fn test_c_type_mapping() {
             DataType::F16 => assert_eq!(ctype, "float16"),
             DataType::F32 => assert_eq!(ctype, "float"),
             DataType::F64 => assert_eq!(ctype, "double"),
-            DataType::Bool => assert_eq!(ctype, "bool"),
-            DataType::Utf8 => assert_eq!(ctype, "uint8_t"),
+            DataType::BOOL => assert_eq!(ctype, "bool"),
+            DataType::STR => assert_eq!(ctype, "uint8_t"),
         }
     }
     matrix_test!(check_c_type);
@@ -71,7 +71,7 @@ fn test_is_signed_unsigned_numeric_flags() {
                 assert!(dt.is_float());
                 assert!(dt.is_numeric());
             }
-            DataType::Bool => {
+            DataType::BOOL => {
                 assert!(!dt.is_signed());
                 assert!(!dt.is_unsigned());
                 assert!(!dt.is_integer());
@@ -79,7 +79,7 @@ fn test_is_signed_unsigned_numeric_flags() {
                 assert!(!dt.is_numeric());
                 assert!(dt.is_boolean());
             }
-            DataType::Utf8 => {
+            DataType::STR => {
                 assert!(!dt.is_signed());
                 assert!(!dt.is_unsigned());
                 assert!(!dt.is_integer());
@@ -94,8 +94,8 @@ fn test_is_signed_unsigned_numeric_flags() {
 
 #[test]
 fn test_boolean_and_string_methods() {
-    assert!(DataType::Bool.is_boolean());
-    assert!(!DataType::Utf8.is_boolean());
-    assert!(DataType::Utf8.is_string());
-    assert!(!DataType::Bool.is_string());
+    assert!(DataType::BOOL.is_boolean());
+    assert!(!DataType::STR.is_boolean());
+    assert!(DataType::STR.is_string());
+    assert!(!DataType::BOOL.is_string());
 }
