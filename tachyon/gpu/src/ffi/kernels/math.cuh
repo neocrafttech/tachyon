@@ -193,9 +193,9 @@ __device__ __forceinline__ T div(C *__restrict__ ctx, const T &a, const T &b) {
 }
 
 template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ BOOL eq(C *__restrict__ _ctx, const T &a,
+__device__ __forceinline__ Bool eq(C *__restrict__ _ctx, const T &a,
                                    const T &b) {
-  BOOL result;
+  Bool result;
 
   result.valid = a.valid & b.valid;
 
@@ -207,9 +207,9 @@ __device__ __forceinline__ BOOL eq(C *__restrict__ _ctx, const T &a,
 }
 
 template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ BOOL neq(C *__restrict__ _ctx, const T &a,
+__device__ __forceinline__ Bool neq(C *__restrict__ _ctx, const T &a,
                                     const T &b) {
-  BOOL result;
+  Bool result;
 
   result.valid = a.valid & b.valid;
 
@@ -221,9 +221,9 @@ __device__ __forceinline__ BOOL neq(C *__restrict__ _ctx, const T &a,
 }
 
 template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ BOOL lt(C *__restrict__ _ctx, const T &a,
+__device__ __forceinline__ Bool lt(C *__restrict__ _ctx, const T &a,
                                    const T &b) {
-  BOOL result;
+  Bool result;
 
   result.valid = a.valid & b.valid;
 
@@ -235,9 +235,10 @@ __device__ __forceinline__ BOOL lt(C *__restrict__ _ctx, const T &a,
 }
 
 template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ BOOL lteq(C *__restrict__ _ctx, const T &a,
+__device__ __forceinline__ Bool lteq(C *__restrict__ _ctx, const T &a,
                                      const T &b) {
-  BOOL result;
+  Bool result;
+
   result.valid = a.valid & b.valid;
 
   if (__builtin_expect(result.valid, 1)) {
@@ -248,9 +249,9 @@ __device__ __forceinline__ BOOL lteq(C *__restrict__ _ctx, const T &a,
 }
 
 template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ BOOL gt(C *__restrict__ _ctx, const T &a,
+__device__ __forceinline__ Bool gt(C *__restrict__ _ctx, const T &a,
                                    const T &b) {
-  BOOL result;
+  Bool result;
 
   result.valid = a.valid & b.valid;
 
@@ -262,9 +263,9 @@ __device__ __forceinline__ BOOL gt(C *__restrict__ _ctx, const T &a,
 }
 
 template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ BOOL gteq(C *__restrict__ _ctx, const T &a,
+__device__ __forceinline__ Bool gteq(C *__restrict__ _ctx, const T &a,
                                      const T &b) {
-  BOOL result;
+  Bool result;
 
   result.valid = a.valid & b.valid;
 

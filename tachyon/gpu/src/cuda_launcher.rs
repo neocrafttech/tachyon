@@ -9,11 +9,13 @@ use std::ffi::CString;
 use std::ptr;
 
 use indoc::formatdoc;
+use sha2::{Digest, Sha256};
 
 use crate::ffi::column::{Column, ColumnFFI};
 use crate::ffi::cuda_runtime::*;
 use crate::ffi::memory::*;
 use crate::ffi::nvrtc::*;
+use crate::kernel_cache::get_or_compile_kernel;
 
 #[inline(always)]
 fn init_cuda() -> Result<(), String> {
@@ -54,9 +56,7 @@ fn get_arch_flag(device: i32) -> Result<String, String> {
 }
 
 #[inline(always)]
-fn compose_kernel_source(code: &str) -> Result<(String, String), String> {
-    let kernel_name = "add_vectors_123".to_string();
-
+fn compose_kernel_source(kernel_name: &str, code: &str) -> Result<String, String> {
     let kernel_source = formatdoc! {r#"
         #include "types.cuh"
         #include "column.cuh"
@@ -69,62 +69,22 @@ fn compose_kernel_source(code: &str) -> Result<(String, String), String> {
             {code}
         }}
     "#};
-    Ok((kernel_source, kernel_name))
+    Ok(kernel_source)
+}
+
+pub fn kernel_name(code: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(code.as_bytes());
+    let result = hasher.finalize();
+
+    format!("kernel_{:x}", result)
 }
 
 fn build_or_load_kernel(
-    kernel_source: &str, kernel_name: &str, device: i32,
+    kernel_name: &str, kernel_source: &str, device: i32,
 ) -> Result<*const std::ffi::c_void, String> {
-    let src = CString::new(kernel_source).unwrap();
-    let name = CString::new(kernel_name).unwrap();
-
-    let mut prog: *mut std::ffi::c_void = ptr::null_mut();
-    unsafe {
-        check_nvrtc(
-            nvrtcCreateProgram(&mut prog, src.as_ptr(), name.as_ptr(), 0, ptr::null(), ptr::null()),
-            "Failed to create NVRTC program",
-            prog,
-        )?;
-    }
-
-    println!("Compiling kernel to CUBIN (fat binary)...");
-
-    let arch_flag = get_arch_flag(device)?;
-
-    let kernel_dir = "/home/manish/tachyon/tachyon/gpu/src/ffi/kernels";
-    let include_dir = format!("-I{}", kernel_dir);
-    let options = [arch_flag.as_str(), "--std=c++20", &include_dir, "-I/usr/local/cuda/include"];
-
-    let c_options: Vec<CString> = options.iter().map(|s| CString::new(*s).unwrap()).collect();
-    let option_ptrs: Vec<*const i8> = c_options.iter().map(|s| s.as_ptr()).collect();
-
-    unsafe {
-        check_nvrtc(
-            nvrtcCompileProgram(prog, option_ptrs.len() as i32, option_ptrs.as_ptr()),
-            "Failed to compile kernel",
-            prog,
-        )?;
-    }
-
-    println!("Getting CUBIN...");
-
-    // Get CUBIN (compiled binary)
-    let mut cubin_size: usize = 0;
-    unsafe {
-        check_nvrtc(nvrtcGetCUBINSize(prog, &mut cubin_size), "Failed to get CUBIN size", prog)?;
-    }
-
-    println!("CUBIN size: {} bytes", cubin_size);
-
-    let mut cubin = vec![0u8; cubin_size];
-    unsafe {
-        check_nvrtc(
-            nvrtcGetCUBIN(prog, cubin.as_mut_ptr() as *mut i8),
-            "Failed to get CUBIN",
-            prog,
-        )?;
-        nvrtcDestroyProgram(&mut prog);
-    }
+    let cubin =
+        get_or_compile_kernel(kernel_name, || build_kernel(kernel_name, kernel_source, device))?;
 
     // Create context
     let mut context: *mut std::ffi::c_void = ptr::null_mut();
@@ -154,6 +114,49 @@ fn build_or_load_kernel(
         )?;
     }
     Ok(kernel)
+}
+
+fn build_kernel(kernel_name: &str, kernel_source: &str, device: i32) -> Result<Vec<u8>, String> {
+    let name = CString::new(kernel_name).unwrap();
+    let src = CString::new(kernel_source).unwrap();
+    let mut prog: *mut std::ffi::c_void = ptr::null_mut();
+    unsafe {
+        check_nvrtc(
+            nvrtcCreateProgram(&mut prog, src.as_ptr(), name.as_ptr(), 0, ptr::null(), ptr::null()),
+            "Failed to create NVRTC program",
+            prog,
+        )?;
+    }
+    println!("Compiling kernel to CUBIN (fat binary)...");
+    let arch_flag = get_arch_flag(device)?;
+    let kernel_dir = "/home/manish/tachyon/tachyon/gpu/src/ffi/kernels";
+    let include_dir = format!("-I{}", kernel_dir);
+    let options = [arch_flag.as_str(), "--std=c++20", &include_dir, "-I/usr/local/cuda/include"];
+    let c_options: Vec<CString> = options.iter().map(|s| CString::new(*s).unwrap()).collect();
+    let option_ptrs: Vec<*const i8> = c_options.iter().map(|s| s.as_ptr()).collect();
+    unsafe {
+        check_nvrtc(
+            nvrtcCompileProgram(prog, option_ptrs.len() as i32, option_ptrs.as_ptr()),
+            "Failed to compile kernel",
+            prog,
+        )?;
+    }
+    println!("Getting CUBIN...");
+    let mut cubin_size: usize = 0;
+    unsafe {
+        check_nvrtc(nvrtcGetCUBINSize(prog, &mut cubin_size), "Failed to get CUBIN size", prog)?;
+    }
+    println!("CUBIN size: {} bytes", cubin_size);
+    let mut cubin = vec![0u8; cubin_size];
+    unsafe {
+        check_nvrtc(
+            nvrtcGetCUBIN(prog, cubin.as_mut_ptr() as *mut i8),
+            "Failed to get CUBIN",
+            prog,
+        )?;
+        nvrtcDestroyProgram(&mut prog);
+    }
+    Ok(cubin)
 }
 
 fn launch_kernel(
@@ -194,9 +197,10 @@ fn launch_kernel(
 pub fn launch(code: &str, input: &[Column], output: &[Column]) -> Result<(), String> {
     init_cuda()?;
     let device = get_device()?;
-    let (kernel_source, kernel_name) = compose_kernel_source(code)?;
+    let kernel_name = kernel_name(code);
+    let kernel_source = compose_kernel_source(&kernel_name, code)?;
     println!("{:#}", kernel_source);
-    let kernel = build_or_load_kernel(&kernel_source, &kernel_name, device)?;
+    let kernel = build_or_load_kernel(&kernel_name, &kernel_source, device)?;
 
     let input_ffi: Vec<ColumnFFI> = input.iter().map(|col| col.as_ffi_column()).collect();
     let output_ffi: Vec<ColumnFFI> = output.iter().map(|col| col.as_ffi_column()).collect();

@@ -10,20 +10,20 @@
 #include "limits.cuh"
 
 enum class TypeKind : uint8_t {
-  BOOL,
-  INT8,
-  UINT8,
-  INT16,
-  UINT16,
-  INT32,
-  UINT32,
-  INT64,
-  UINT64,
-  BFLOAT16,
-  FLOAT16,
-  FLOAT32,
-  FLOAT64,
-  STRING,
+  Bool,
+  Int8,
+  UInt8,
+  Int16,
+  UInt16,
+  Int32,
+  UInt32,
+  Int64,
+  UInt64,
+  BFloat16,
+  Float16,
+  Float32,
+  Float64,
+  String,
 };
 
 template <TypeKind K> struct TypeTraits;
@@ -61,41 +61,41 @@ template <TypeKind K> struct TypeTraits;
     __host__ __device__ static constexpr CPP_TYPE max() { return MAX_EXPR; }   \
   };
 
-DEFINE_TYPE(BOOL, bool, sizeof(bool), false, false, false, true)
-DEFINE_TYPE(INT8, int8_t, sizeof(int8_t), true, false,
+DEFINE_TYPE(Bool, bool, sizeof(bool), false, false, false, true)
+DEFINE_TYPE(Int8, int8_t, sizeof(int8_t), true, false,
             std::numeric_limits<int8_t>::min(),
             std::numeric_limits<int8_t>::max())
-DEFINE_TYPE(UINT8, uint8_t, sizeof(uint8_t), false, false,
+DEFINE_TYPE(UInt8, uint8_t, sizeof(uint8_t), false, false,
             std::numeric_limits<uint8_t>::min(),
             std::numeric_limits<uint8_t>::max())
-DEFINE_TYPE(INT16, int16_t, sizeof(int16_t), true, false,
+DEFINE_TYPE(Int16, int16_t, sizeof(int16_t), true, false,
             std::numeric_limits<int16_t>::min(),
             std::numeric_limits<int16_t>::max())
-DEFINE_TYPE(UINT16, uint16_t, sizeof(uint16_t), false, false,
+DEFINE_TYPE(UInt16, uint16_t, sizeof(uint16_t), false, false,
             std::numeric_limits<uint16_t>::min(),
             std::numeric_limits<uint16_t>::max())
-DEFINE_TYPE(INT32, int32_t, sizeof(int32_t), true, false,
+DEFINE_TYPE(Int32, int32_t, sizeof(int32_t), true, false,
             std::numeric_limits<int32_t>::min(),
             std::numeric_limits<int32_t>::max())
-DEFINE_TYPE(UINT32, uint32_t, sizeof(uint32_t), false, false,
+DEFINE_TYPE(UInt32, uint32_t, sizeof(uint32_t), false, false,
             std::numeric_limits<uint32_t>::min(),
             std::numeric_limits<uint32_t>::max())
-DEFINE_TYPE(INT64, int64_t, sizeof(int64_t), true, false,
+DEFINE_TYPE(Int64, int64_t, sizeof(int64_t), true, false,
             std::numeric_limits<int64_t>::min(),
             std::numeric_limits<int64_t>::max())
-DEFINE_TYPE(UINT64, uint64_t, sizeof(uint64_t), false, false,
+DEFINE_TYPE(UInt64, uint64_t, sizeof(uint64_t), false, false,
             std::numeric_limits<uint64_t>::min(),
             std::numeric_limits<uint64_t>::max())
-DEFINE_TYPE(BFLOAT16, bfloat16, sizeof(bfloat16), true, true,
+DEFINE_TYPE(BFloat16, bfloat16, sizeof(bfloat16), true, true,
             std::numeric_limits<bfloat16>::min(),
             std::numeric_limits<bfloat16>::max())
-DEFINE_TYPE(FLOAT16, float16, sizeof(float16), true, true,
+DEFINE_TYPE(Float16, float16, sizeof(float16), true, true,
             std::numeric_limits<float16>::min(),
             std::numeric_limits<float16>::max())
-DEFINE_TYPE(FLOAT32, float, sizeof(float), true, true,
+DEFINE_TYPE(Float32, float, sizeof(float), true, true,
             std::numeric_limits<float>::min(),
             std::numeric_limits<float>::max())
-DEFINE_TYPE(FLOAT64, double, sizeof(double), true, true,
+DEFINE_TYPE(Float64, double, sizeof(double), true, true,
             std::numeric_limits<double>::min(),
             std::numeric_limits<double>::max())
 
@@ -107,19 +107,19 @@ template <TypeKind K> struct KindToWrapper;
     using type = ENUM_VAL;                                                     \
   };
 
-DEFINE_KIND_MAPPING(BOOL)
-DEFINE_KIND_MAPPING(INT8)
-DEFINE_KIND_MAPPING(UINT8)
-DEFINE_KIND_MAPPING(INT16)
-DEFINE_KIND_MAPPING(UINT16)
-DEFINE_KIND_MAPPING(INT32)
-DEFINE_KIND_MAPPING(UINT32)
-DEFINE_KIND_MAPPING(INT64)
-DEFINE_KIND_MAPPING(UINT64)
-DEFINE_KIND_MAPPING(BFLOAT16)
-DEFINE_KIND_MAPPING(FLOAT16)
-DEFINE_KIND_MAPPING(FLOAT32)
-DEFINE_KIND_MAPPING(FLOAT64)
+DEFINE_KIND_MAPPING(Bool)
+DEFINE_KIND_MAPPING(Int8)
+DEFINE_KIND_MAPPING(UInt8)
+DEFINE_KIND_MAPPING(Int16)
+DEFINE_KIND_MAPPING(UInt16)
+DEFINE_KIND_MAPPING(Int32)
+DEFINE_KIND_MAPPING(UInt32)
+DEFINE_KIND_MAPPING(Int64)
+DEFINE_KIND_MAPPING(UInt64)
+DEFINE_KIND_MAPPING(BFloat16)
+DEFINE_KIND_MAPPING(Float16)
+DEFINE_KIND_MAPPING(Float32)
+DEFINE_KIND_MAPPING(Float64)
 
 #undef DEFINE_KIND_MAPPING
 
@@ -145,19 +145,19 @@ struct TypeDescriptor {
 };
 
 __constant__ const TypeDescriptor TYPE_DESCRIPTORS[] = {
-    TypeDescriptor::from_type<TypeKind::BOOL>(),
-    TypeDescriptor::from_type<TypeKind::INT8>(),
-    TypeDescriptor::from_type<TypeKind::UINT8>(),
-    TypeDescriptor::from_type<TypeKind::INT16>(),
-    TypeDescriptor::from_type<TypeKind::UINT16>(),
-    TypeDescriptor::from_type<TypeKind::INT32>(),
-    TypeDescriptor::from_type<TypeKind::UINT32>(),
-    TypeDescriptor::from_type<TypeKind::INT64>(),
-    TypeDescriptor::from_type<TypeKind::UINT64>(),
-    TypeDescriptor::from_type<TypeKind::BFLOAT16>(),
-    TypeDescriptor::from_type<TypeKind::FLOAT16>(),
-    TypeDescriptor::from_type<TypeKind::FLOAT32>(),
-    TypeDescriptor::from_type<TypeKind::FLOAT64>(),
+    TypeDescriptor::from_type<TypeKind::Bool>(),
+    TypeDescriptor::from_type<TypeKind::Int8>(),
+    TypeDescriptor::from_type<TypeKind::UInt8>(),
+    TypeDescriptor::from_type<TypeKind::Int16>(),
+    TypeDescriptor::from_type<TypeKind::UInt16>(),
+    TypeDescriptor::from_type<TypeKind::Int32>(),
+    TypeDescriptor::from_type<TypeKind::UInt32>(),
+    TypeDescriptor::from_type<TypeKind::Int64>(),
+    TypeDescriptor::from_type<TypeKind::UInt64>(),
+    TypeDescriptor::from_type<TypeKind::BFloat16>(),
+    TypeDescriptor::from_type<TypeKind::Float16>(),
+    TypeDescriptor::from_type<TypeKind::Float32>(),
+    TypeDescriptor::from_type<TypeKind::Float64>(),
 };
 
 __host__ __device__ inline const TypeDescriptor &

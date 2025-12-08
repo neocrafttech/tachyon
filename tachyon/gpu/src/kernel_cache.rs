@@ -5,78 +5,174 @@
  * as found in the LICENSE file in the root directory of this source tree.
  */
 
-use crate::nvrtc_wrapper::compile_cuda_file_to_fatbin;
-use sha2::{Digest, Sha256};
-use std::env;
+use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 #[derive(Debug, thiserror::Error)]
-pub enum KernelCacheError {
-    #[error("NVRTC compile failed: {0}")]
-    Nvrtc(#[from] crate::nvrtc_wrapper::NvrtcError),
-
+pub enum CacheError {
     #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
+    IoError(io::Error),
 }
 
-/// Compute a SHA256 hash of the kernel source to detect changes.
-fn compute_source_hash<P: AsRef<Path>>(path: P) -> Result<String, KernelCacheError> {
-    let src = fs::read(path)?;
-    let mut hasher = Sha256::new();
-    hasher.update(&src);
-    Ok(format!("{:x}", hasher.finalize()))
+impl From<io::Error> for CacheError {
+    fn from(err: io::Error) -> Self {
+        CacheError::IoError(err)
+    }
 }
 
-fn get_cache_dir() -> PathBuf {
-    if let Ok(dir) = env::var("NVRTC_CACHE_DIR") {
-        return PathBuf::from(dir);
-    }
+static KERNEL_CACHE: OnceLock<Mutex<KernelCache>> = OnceLock::new();
 
-    if let Ok(home) = env::var("HOME") {
-        return PathBuf::from(home).join(".nvrtc_cache");
-    }
-
-    //Window case
-    if let Ok(home) = env::var("USERPROFILE") {
-        return PathBuf::from(home).join(".nvrtc_cache");
-    }
-
-    //Current directory as fallback
-    PathBuf::from(".nvrtc_cache")
+pub struct KernelCache {
+    cache_dir: PathBuf,
+    memory_cache: HashMap<String, Vec<u8>>,
 }
 
-/// Given a CUDA file and target arch, either load from cache or compile anew.
-pub fn load_or_compile_kernel<P: AsRef<Path>>(
-    path: P, arch: &str,
-) -> Result<PathBuf, KernelCacheError> {
-    let path = path.as_ref();
-    let hash = compute_source_hash(path)?;
-
-    let cache_dir = get_cache_dir();
-    fs::create_dir_all(&cache_dir)?;
-
-    let fatbin_name = format!(
-        "{}_{}_{}.fatbin",
-        path.file_stem().unwrap().to_string_lossy(),
-        arch,
-        &hash[..16] // shorten hash
-    );
-    let fatbin_path = cache_dir.join(fatbin_name);
-
-    if fatbin_path.exists() {
-        println!("Loaded cached fatbin: {}", fatbin_path.display());
-        return Ok(fatbin_path);
+impl KernelCache {
+    pub fn global() -> &'static Mutex<KernelCache> {
+        KERNEL_CACHE.get_or_init(|| {
+            let cache =
+                KernelCache::new(Self::default_dir()).expect("Failed to initialize kernel cache");
+            Mutex::new(cache)
+        })
     }
 
-    println!("Compiling kernel {} for {}", path.display(), arch);
+    fn new<P: AsRef<Path>>(cache_dir: P) -> io::Result<Self> {
+        let cache_dir = cache_dir.as_ref().to_path_buf();
 
-    let fatbin = compile_cuda_file_to_fatbin(path, arch)?;
-    println!("fatbin {:?}", fatbin_path);
-    let mut file = fs::File::create(&fatbin_path)?;
-    file.write_all(fatbin.as_bytes())?;
-    println!("Saved fatbin to {}", fatbin_path.display());
+        if !cache_dir.exists() {
+            fs::create_dir_all(&cache_dir)?;
+        }
 
-    Ok(fatbin_path)
+        Ok(Self { cache_dir, memory_cache: HashMap::new() })
+    }
+
+    fn default_dir() -> PathBuf {
+        let mut path = dirs::cache_dir().unwrap_or_else(|| PathBuf::from(".cache"));
+        path.push("tachyon");
+        path.push("kernels");
+        path
+    }
+
+    fn cache_path(&self, kernel_name: &str) -> PathBuf {
+        let safe_name = kernel_name.replace(['/', '\\', ':'], "_");
+        self.cache_dir.join(format!("{}.bin", safe_name))
+    }
+
+    fn exists(&self, kernel_name: &str) -> bool {
+        self.memory_cache.contains_key(kernel_name) || self.cache_path(kernel_name).exists()
+    }
+
+    fn load(&mut self, kernel_name: &str) -> Result<Vec<u8>, CacheError> {
+        if let Some(kernel) = self.memory_cache.get(kernel_name) {
+            return Ok(kernel.clone());
+        }
+
+        let path = self.cache_path(kernel_name);
+        let mut file = fs::File::open(&path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+
+        self.memory_cache.insert(kernel_name.to_string(), buffer.clone());
+
+        Ok(buffer)
+    }
+
+    fn save(&mut self, kernel_name: &str, kernel_data: &[u8]) -> Result<(), CacheError> {
+        let path = self.cache_path(kernel_name);
+        let mut file = fs::File::create(&path)?;
+        file.write_all(kernel_data)?;
+
+        self.memory_cache.insert(kernel_name.to_string(), kernel_data.to_vec());
+
+        Ok(())
+    }
+
+    pub fn get_or_compile<F>(&mut self, kernel_name: &str, compile_fn: F) -> Result<Vec<u8>, String>
+    where
+        F: FnOnce() -> Result<Vec<u8>, String>,
+    {
+        if self.exists(kernel_name) {
+            return self.load(kernel_name).map_err(|e| format!("Failed to load kernel: {:?}", e));
+        }
+
+        println!("Compiling kernel: {}", kernel_name);
+        let kernel_data = compile_fn()?;
+
+        self.save(kernel_name, &kernel_data)
+            .map_err(|e| format!("Failed to save kernel: {:?}", e))?;
+
+        Ok(kernel_data)
+    }
+
+    fn clear_memory_cache(&mut self) {
+        self.memory_cache.clear();
+    }
+
+    fn clear_disk_cache(&self) -> io::Result<()> {
+        if self.cache_dir.exists() {
+            for entry in fs::read_dir(&self.cache_dir)? {
+                let entry = entry?;
+                if entry.path().extension().and_then(|s| s.to_str()) == Some("bin") {
+                    fs::remove_file(entry.path())?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn clear_all(&mut self) -> io::Result<()> {
+        self.clear_memory_cache();
+        self.clear_disk_cache()
+    }
+}
+
+pub fn get_or_compile_kernel<F>(kernel_name: &str, compile_fn: F) -> Result<Vec<u8>, String>
+where
+    F: FnOnce() -> Result<Vec<u8>, String>,
+{
+    let mut cache = KernelCache::global().lock().unwrap();
+    cache.get_or_compile(kernel_name, compile_fn)
+}
+
+#[allow(dead_code)]
+pub fn clear_kernel_cache() -> io::Result<()> {
+    let mut cache = KernelCache::global().lock().unwrap();
+    cache.clear_all()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_kernel_cache() {
+        let temp_dir = std::env::temp_dir().join("test_kernel_cache");
+        let mut cache = KernelCache::new(&temp_dir).unwrap();
+
+        let mut compile_count = 0;
+
+        let kernel1 = cache
+            .get_or_compile("test_kernel", || {
+                compile_count += 1;
+                Ok(vec![1, 2, 3, 4])
+            })
+            .unwrap();
+        assert_eq!(compile_count, 1);
+        assert_eq!(kernel1, vec![1, 2, 3, 4]);
+
+        let kernel2 = cache
+            .get_or_compile("test_kernel", || {
+                compile_count += 1;
+                Ok(vec![5, 6, 7, 8])
+            })
+            .unwrap();
+        assert_eq!(compile_count, 1); // Still 1, not compiled again
+        assert_eq!(kernel2, vec![1, 2, 3, 4]); // Same as first
+
+        cache.clear_all().unwrap();
+        fs::remove_dir(&temp_dir).ok();
+    }
 }

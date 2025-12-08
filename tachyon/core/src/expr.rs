@@ -230,8 +230,8 @@ impl Expr {
                 Literal::F16(_) => Ok(DataType::F16),
                 Literal::F32(_) => Ok(DataType::F32),
                 Literal::F64(_) => Ok(DataType::F64),
-                Literal::Bool(_) => Ok(DataType::BOOL),
-                Literal::Str(_) => Ok(DataType::STR),
+                Literal::Bool(_) => Ok(DataType::Bool),
+                Literal::Str(_) => Ok(DataType::Str),
             },
 
             Expr::Unary { op, expr } => {
@@ -247,7 +247,7 @@ impl Expr {
                         _ => Err(TypeError::Unsupported(format!("neg on {:?}", t))),
                     },
                     Operator::Not => match t {
-                        DataType::BOOL => Ok(DataType::BOOL),
+                        DataType::Bool => Ok(DataType::Bool),
                         _ => Err(TypeError::Unsupported(format!("not on {:?}", t))),
                     },
                     _ => Err(TypeError::Unsupported(format!("Not supported unary op {}", op)))?,
@@ -312,14 +312,14 @@ impl Expr {
                     | Operator::Lt
                     | Operator::LtEq
                     | Operator::Gt
-                    | Operator::GtEq => Ok(DataType::BOOL),
+                    | Operator::GtEq => Ok(DataType::Bool),
                     Operator::And | Operator::Or => {
                         if lt == rt {
-                            Ok(DataType::BOOL)
+                            Ok(DataType::Bool)
                         } else {
                             Err(TypeError::TypeMismatch {
-                                expected: DataType::BOOL,
-                                got: if lt != DataType::BOOL { lt } else { rt },
+                                expected: DataType::Bool,
+                                got: if lt != DataType::Bool { lt } else { rt },
                             })
                         }
                     }
@@ -343,13 +343,13 @@ impl Expr {
                     if args.len() != 1 {
                         Err(TypeError::Unsupported("lower arity".into()))?;
                     }
-                    Ok(DataType::STR)
+                    Ok(DataType::Str)
                 }
                 "upper" => {
                     if args.len() != 1 {
                         Err(TypeError::Unsupported("upper arity".into()))?;
                     }
-                    Ok(DataType::STR)
+                    Ok(DataType::Str)
                 }
                 _ => Err(TypeError::Unsupported(format!("unknown function {}", name))),
             },
