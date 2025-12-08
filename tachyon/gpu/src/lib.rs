@@ -6,4 +6,5 @@
  */
 
 pub mod cuda_launcher;
-pub mod ffi; //TODO Hide it
+pub mod ffi;
+pub(crate) mod kernel_cache; //TODO Hide it

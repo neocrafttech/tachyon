@@ -3,6 +3,7 @@ use core::data_type::DataType;
 macro_rules! matrix_test {
     ($test_fn:ident) => {{
         let all_types = [
+            DataType::Bool,
             DataType::I8,
             DataType::I16,
             DataType::I32,
@@ -15,8 +16,7 @@ macro_rules! matrix_test {
             DataType::F16,
             DataType::F32,
             DataType::F64,
-            DataType::BOOL,
-            DataType::STR,
+            DataType::Str,
         ];
         for dtype in all_types {
             $test_fn(dtype);
@@ -29,6 +29,7 @@ fn test_c_type_mapping() {
     fn check_c_type(dt: DataType) {
         let ctype = dt.c_type();
         match dt {
+            DataType::Bool => assert_eq!(ctype, "bool"),
             DataType::I8 => assert_eq!(ctype, "int8_t"),
             DataType::I16 => assert_eq!(ctype, "int16_t"),
             DataType::I32 => assert_eq!(ctype, "int32_t"),
@@ -41,8 +42,7 @@ fn test_c_type_mapping() {
             DataType::F16 => assert_eq!(ctype, "float16"),
             DataType::F32 => assert_eq!(ctype, "float"),
             DataType::F64 => assert_eq!(ctype, "double"),
-            DataType::BOOL => assert_eq!(ctype, "bool"),
-            DataType::STR => assert_eq!(ctype, "uint8_t"),
+            DataType::Str => assert_eq!(ctype, "uint8_t"),
         }
     }
     matrix_test!(check_c_type);
@@ -71,7 +71,7 @@ fn test_is_signed_unsigned_numeric_flags() {
                 assert!(dt.is_float());
                 assert!(dt.is_numeric());
             }
-            DataType::BOOL => {
+            DataType::Bool => {
                 assert!(!dt.is_signed());
                 assert!(!dt.is_unsigned());
                 assert!(!dt.is_integer());
@@ -79,7 +79,7 @@ fn test_is_signed_unsigned_numeric_flags() {
                 assert!(!dt.is_numeric());
                 assert!(dt.is_boolean());
             }
-            DataType::STR => {
+            DataType::Str => {
                 assert!(!dt.is_signed());
                 assert!(!dt.is_unsigned());
                 assert!(!dt.is_integer());
@@ -94,8 +94,8 @@ fn test_is_signed_unsigned_numeric_flags() {
 
 #[test]
 fn test_boolean_and_string_methods() {
-    assert!(DataType::BOOL.is_boolean());
-    assert!(!DataType::STR.is_boolean());
-    assert!(DataType::STR.is_string());
-    assert!(!DataType::BOOL.is_string());
+    assert!(DataType::Bool.is_boolean());
+    assert!(!DataType::Str.is_boolean());
+    assert!(DataType::Str.is_string());
+    assert!(!DataType::Bool.is_string());
 }

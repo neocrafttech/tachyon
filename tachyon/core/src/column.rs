@@ -10,6 +10,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use gpu::ffi::column as gpu_column;
+use half::{bf16, f16};
 
 use crate::data_type::DataType;
 pub trait Array: std::fmt::Debug + Send + Sync {
@@ -48,6 +49,25 @@ pub struct Column {
     pub null_bits: Option<Vec<u64>>,
 }
 
+macro_rules! from_gpu_column {
+    ($name:expr, $type:ty, $data_type:expr, $column:expr) => {
+        Self::new(
+            $name,
+            Arc::new(VecArray { data: $column.host_data::<$type>()?, datatype: $data_type }),
+            $column.host_bitmap()?,
+        )
+    };
+}
+
+macro_rules! to_gpu_column {
+    ($self:expr, $type:ty) => {
+        gpu_column::Column::new(
+            $self.data_as_slice::<$type>().ok_or("Failed to cast")?,
+            $self.null_bits_as_slice(),
+        )
+    };
+}
+
 impl Column {
     pub fn new<T: Array + 'static>(
         name: &str, values: Arc<T>, validity_bits: Option<Vec<u64>>,
@@ -80,61 +100,19 @@ impl Column {
         column: &gpu_column::Column, name: &str, data_type: DataType,
     ) -> Result<Self, Box<dyn Error>> {
         let col = match data_type {
-            DataType::I8 => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<i8>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
-            DataType::I16 => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<i16>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
-            DataType::I32 => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<i32>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
-            DataType::I64 => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<i64>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
-            DataType::U8 => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<u8>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
-            DataType::U16 => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<u16>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
-            DataType::U32 => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<u32>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
-            DataType::U64 => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<u64>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
-            DataType::F32 => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<f32>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
-            DataType::F64 => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<f64>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
-            DataType::BOOL => Self::new(
-                name,
-                Arc::new(VecArray { data: column.host_data::<bool>()?, datatype: data_type }),
-                column.host_bitmap()?,
-            ),
+            DataType::I8 => from_gpu_column!(name, i8, data_type, column),
+            DataType::I16 => from_gpu_column!(name, i16, data_type, column),
+            DataType::I32 => from_gpu_column!(name, i32, data_type, column),
+            DataType::I64 => from_gpu_column!(name, i64, data_type, column),
+            DataType::U8 => from_gpu_column!(name, u8, data_type, column),
+            DataType::U16 => from_gpu_column!(name, u16, data_type, column),
+            DataType::U32 => from_gpu_column!(name, u32, data_type, column),
+            DataType::U64 => from_gpu_column!(name, u64, data_type, column),
+            DataType::BF16 => from_gpu_column!(name, bf16, data_type, column),
+            DataType::F16 => from_gpu_column!(name, f16, data_type, column),
+            DataType::F32 => from_gpu_column!(name, f32, data_type, column),
+            DataType::F64 => from_gpu_column!(name, f64, data_type, column),
+            DataType::Bool => from_gpu_column!(name, bool, data_type, column),
             _ => todo!(),
         };
         Ok(col)
@@ -142,50 +120,19 @@ impl Column {
 
     pub fn to_gpu_column(&self) -> Result<gpu_column::Column, Box<dyn Error>> {
         match self.data_type {
-            DataType::I8 => gpu_column::Column::new(
-                self.data_as_slice::<i8>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
-            DataType::I16 => gpu_column::Column::new(
-                self.data_as_slice::<i16>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
-            DataType::I32 => gpu_column::Column::new(
-                self.data_as_slice::<i32>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
-            DataType::I64 => gpu_column::Column::new(
-                self.data_as_slice::<i64>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
-            DataType::U8 => gpu_column::Column::new(
-                self.data_as_slice::<u8>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
-            DataType::U16 => gpu_column::Column::new(
-                self.data_as_slice::<u16>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
-            DataType::U32 => gpu_column::Column::new(
-                self.data_as_slice::<u32>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
-            DataType::U64 => gpu_column::Column::new(
-                self.data_as_slice::<u64>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
-            DataType::F32 => gpu_column::Column::new(
-                self.data_as_slice::<f32>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
-            DataType::F64 => gpu_column::Column::new(
-                self.data_as_slice::<f64>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
-            DataType::BOOL => gpu_column::Column::new(
-                self.data_as_slice::<bool>().ok_or("Failed to cast")?,
-                self.null_bits_as_slice(),
-            ),
+            DataType::I8 => to_gpu_column!(self, i8),
+            DataType::I16 => to_gpu_column!(self, i16),
+            DataType::I32 => to_gpu_column!(self, i32),
+            DataType::I64 => to_gpu_column!(self, i64),
+            DataType::U8 => to_gpu_column!(self, u8),
+            DataType::U16 => to_gpu_column!(self, u16),
+            DataType::U32 => to_gpu_column!(self, u32),
+            DataType::U64 => to_gpu_column!(self, u64),
+            DataType::BF16 => to_gpu_column!(self, bf16),
+            DataType::F16 => to_gpu_column!(self, f16),
+            DataType::F32 => to_gpu_column!(self, f32),
+            DataType::F64 => to_gpu_column!(self, f64),
+            DataType::Bool => to_gpu_column!(self, bool),
             _ => Err(format!("Unsupported data type: {:?}", self.data_type).into()),
         }
     }

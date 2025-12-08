@@ -65,7 +65,7 @@ impl Column {
 
         ColumnFFI {
             data: data_ptr as *const std::os::raw::c_void,
-            validity_bitmap: validity_ptr as *const u64,
+            null_bits: validity_ptr as *const u64,
             size: self.data_memory.len(),
         }
     }
@@ -91,6 +91,6 @@ impl Column {
 #[derive(Clone, Copy, Debug)]
 pub struct ColumnFFI {
     pub data: *const std::os::raw::c_void,
-    pub validity_bitmap: *const u64,
+    pub null_bits: *const u64,
     pub size: usize,
 }

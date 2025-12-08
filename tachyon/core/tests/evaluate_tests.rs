@@ -40,6 +40,7 @@ impl ArrowMapper for f64 {
     type ArrowType = Float64Type;
 }
 
+#[macro_export]
 macro_rules! random_vec {
     ($size:expr, $native_type:ty) => {{
         use rand;
@@ -56,6 +57,7 @@ macro_rules! random_vec {
     }};
 }
 
+#[macro_export]
 macro_rules! random_num {
     ($min:expr, $max:expr) => {{
         use rand;
@@ -66,6 +68,7 @@ macro_rules! random_num {
     }};
 }
 
+#[macro_export]
 macro_rules! create_column {
     ($vec:expr, $name:expr, $data_type:expr) => {{
         use core::column::{Column, VecArray};
@@ -342,16 +345,16 @@ test_eval_binary_matrix!(
     Operator::Add,
     ErrorMode::Ansi,
     [
-        (test_add_i8_ansi, i8, DataType::I8, i8, 100, 100_000),
-        (test_add_u8_ansi, u8, DataType::U8, u8, 100, 100_000),
-        (test_add_i16_ansi, i16, DataType::I16, i16, 500, 500_000),
-        (test_add_u16_ansi, u16, DataType::U16, u16, 500, 500_000),
-        (test_add_i32_ansi, i32, DataType::I32, i32, 1024, 1024_000),
-        (test_add_u32_ansi, u32, DataType::U32, u32, 512, 512_000),
-        (test_add_i64_ansi, i64, DataType::I64, i64, 1024, 1024_000),
-        (test_add_u64_ansi, u64, DataType::U64, u64, 512, 512_000),
-        (test_add_f32_ansi, f32, DataType::F32, f32, 1024, 1024_000),
-        (test_add_f64_ansi, f64, DataType::F64, f64, 1000, 1000_000),
+        (test_add_ansi_i8, i8, DataType::I8, i8, 100, 100_000),
+        (test_add_ansi_u8, u8, DataType::U8, u8, 100, 100_000),
+        (test_add_ansi_i16, i16, DataType::I16, i16, 500, 500_000),
+        (test_add_ansi_u16, u16, DataType::U16, u16, 500, 500_000),
+        (test_add_ansi_i32, i32, DataType::I32, i32, 1024, 1024_000),
+        (test_add_ansi_u32, u32, DataType::U32, u32, 512, 512_000),
+        (test_add_ansi_i64, i64, DataType::I64, i64, 1024, 1024_000),
+        (test_add_ansi_u64, u64, DataType::U64, u64, 512, 512_000),
+        (test_add_ansi_f32, f32, DataType::F32, f32, 1024, 1024_000),
+        (test_add_ansi_f64, f64, DataType::F64, f64, 1000, 1000_000),
     ]
 );
 
@@ -360,16 +363,16 @@ test_eval_binary_matrix!(
     Operator::Sub,
     ErrorMode::Ansi,
     [
-        (test_sub_i8_ansi, i8, DataType::I8, i8, 100, 100_000),
-        (test_sub_u8_ansi, u8, DataType::U8, u8, 100, 100_000),
-        (test_sub_i16_ansi, i16, DataType::I16, i16, 500, 500_000),
-        (test_sub_u16_ansi, u16, DataType::U16, u16, 500, 500_000),
-        (test_sub_i32_ansi, i32, DataType::I32, i32, 1024, 1024_000),
-        (test_sub_u32_ansi, u32, DataType::U32, u32, 512, 512_000),
-        (test_sub_i64_ansi, i64, DataType::I64, i64, 1024, 1024_000),
-        (test_sub_u64_ansi, u64, DataType::U64, u64, 512, 512_000),
-        (test_sub_f32_ansi, f32, DataType::F32, f32, 1024, 1024_000),
-        (test_sub_f64_ansi, f64, DataType::F64, f64, 1000, 1000_000),
+        (test_sub_ansi_i8, i8, DataType::I8, i8, 100, 100_000),
+        (test_sub_ansi_u8, u8, DataType::U8, u8, 100, 100_000),
+        (test_sub_ansi_i16, i16, DataType::I16, i16, 500, 500_000),
+        (test_sub_ansi_u16, u16, DataType::U16, u16, 500, 500_000),
+        (test_sub_ansi_i32, i32, DataType::I32, i32, 1024, 1024_000),
+        (test_sub_ansi_u32, u32, DataType::U32, u32, 512, 512_000),
+        (test_sub_ansi_i64, i64, DataType::I64, i64, 1024, 1024_000),
+        (test_sub_ansi_u64, u64, DataType::U64, u64, 512, 512_000),
+        (test_sub_ansi_f32, f32, DataType::F32, f32, 1024, 1024_000),
+        (test_sub_ansi_f64, f64, DataType::F64, f64, 1000, 1000_000),
     ]
 );
 
@@ -378,16 +381,16 @@ test_eval_binary_matrix!(
     Operator::Mul,
     ErrorMode::Ansi,
     [
-        (test_mul_i8_ansi, i8, DataType::I8, i8, 100, 100_000),
-        (test_mul_u8_ansi, u8, DataType::U8, u8, 100, 100_000),
-        (test_mul_i16_ansi, i16, DataType::I16, i16, 500, 500_000),
-        (test_mul_u16_ansi, u16, DataType::U16, u16, 500, 500_000),
-        (test_mul_i32_ansi, i32, DataType::I32, i32, 1024, 1024_000),
-        (test_mul_u32_ansi, u32, DataType::U32, u32, 512, 512_000),
-        (test_mul_i64_ansi, i64, DataType::I64, i64, 1024, 1024_000),
-        (test_mul_u64_ansi, u64, DataType::U64, u64, 512, 512_000),
-        (test_mul_f32_ansi, f32, DataType::F32, f32, 1024, 1024_000),
-        (test_mul_f64_ansi, f64, DataType::F64, f64, 1000, 1000_000),
+        (test_mul_ansi_i8, i8, DataType::I8, i8, 100, 100_000),
+        (test_mul_ansi_u8, u8, DataType::U8, u8, 100, 100_000),
+        (test_mul_ansi_i16, i16, DataType::I16, i16, 500, 500_000),
+        (test_mul_ansi_u16, u16, DataType::U16, u16, 500, 500_000),
+        (test_mul_ansi_i32, i32, DataType::I32, i32, 1024, 1024_000),
+        (test_mul_ansi_u32, u32, DataType::U32, u32, 512, 512_000),
+        (test_mul_ansi_i64, i64, DataType::I64, i64, 1024, 1024_000),
+        (test_mul_ansi_u64, u64, DataType::U64, u64, 512, 512_000),
+        (test_mul_ansi_f32, f32, DataType::F32, f32, 1024, 1024_000),
+        (test_mul_ansi_f64, f64, DataType::F64, f64, 1000, 1000_000),
     ]
 );
 

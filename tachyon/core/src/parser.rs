@@ -365,8 +365,8 @@ impl Parser {
                         "u64" => DataType::U64,
                         "f32" => DataType::F32,
                         "f64" => DataType::F64,
-                        "bool" => DataType::BOOL,
-                        "utf8" | "string" => DataType::STR,
+                        "bool" => DataType::Bool,
+                        "utf8" | "string" => DataType::Str,
                         _ => return Err(ParseError::InvalidLiteral(type_name)),
                     };
                     Ok(args.remove(0).cast(data_type))
