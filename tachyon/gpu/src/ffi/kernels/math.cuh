@@ -167,7 +167,7 @@ __device__ __forceinline__ T div(C *__restrict__ ctx, const T &a, const T &b) {
   result.valid = a.valid & b.valid;
 
   if (__builtin_expect(result.valid, 1)) {
-    if (__builtin_expect(b.value == 0, 0)) {
+    if (__builtin_expect(b.value == b.zero(), 0)) {
       result.valid = false;
       ctx[0].error_code = ErrorCode::DIV_BY_ZERO;
       return result;

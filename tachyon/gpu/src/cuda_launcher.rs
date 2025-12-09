@@ -83,8 +83,9 @@ pub fn kernel_name(code: &str) -> String {
 fn build_or_load_kernel(
     kernel_name: &str, kernel_source: &str, device: i32,
 ) -> Result<*const std::ffi::c_void, String> {
+    let cache_key = format!("{}-{}", kernel_name, device);
     let cubin =
-        get_or_compile_kernel(kernel_name, || build_kernel(kernel_name, kernel_source, device))?;
+        get_or_compile_kernel(&cache_key, || build_kernel(kernel_name, kernel_source, device))?;
 
     // Create context
     let mut context: *mut std::ffi::c_void = ptr::null_mut();
@@ -129,8 +130,9 @@ fn build_kernel(kernel_name: &str, kernel_source: &str, device: i32) -> Result<V
     }
     println!("Compiling kernel to CUBIN (fat binary)...");
     let arch_flag = get_arch_flag(device)?;
-    let kernel_dir = "/home/manish/tachyon/tachyon/gpu/src/ffi/kernels";
-    let include_dir = format!("-I{}", kernel_dir);
+    let kernel_dir = get_kernel_path("src/ffi/kernels");
+    let include_dir = format!("-I{}", kernel_dir.display());
+    println!("Kernel directory: {}", include_dir);
     let options = [arch_flag.as_str(), "--std=c++20", &include_dir, "-I/usr/local/cuda/include"];
     let c_options: Vec<CString> = options.iter().map(|s| CString::new(*s).unwrap()).collect();
     let option_ptrs: Vec<*const i8> = c_options.iter().map(|s| s.as_ptr()).collect();
@@ -157,6 +159,10 @@ fn build_kernel(kernel_name: &str, kernel_source: &str, device: i32) -> Result<V
         nvrtcDestroyProgram(&mut prog);
     }
     Ok(cubin)
+}
+
+fn get_kernel_path(relative: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("LIB_ROOT")).join(relative)
 }
 
 fn launch_kernel(
@@ -230,6 +236,7 @@ pub fn launch(code: &str, input: &[Column], output: &[Column]) -> Result<(), Str
     let host_ctx = device_ctx.to_vec::<ContextFFI>().unwrap();
 
     if host_ctx[0].error_code != 0 {
+        println!("CUDA error: {}", host_ctx[0].error_code);
         return Err(format!("CUDA error: {}", host_ctx[0].error_code));
     }
 
