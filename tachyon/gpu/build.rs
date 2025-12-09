@@ -8,4 +8,5 @@
 fn main() {
     println!("cargo:rustc-link-lib=nvrtc");
     println!("cargo:rustc-link-search=/usr/local/cuda/lib64");
+    println!("cargo:rustc-env=LIB_ROOT={}", std::env::var("CARGO_MANIFEST_DIR").unwrap());
 }

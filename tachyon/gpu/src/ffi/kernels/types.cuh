@@ -29,7 +29,7 @@ enum class TypeKind : uint8_t {
 template <TypeKind K> struct TypeTraits;
 
 #define DEFINE_TYPE(NAME, CPP_TYPE, SIZE, IS_SIGNED, IS_FLOAT, MIN_EXPR,       \
-                    MAX_EXPR)                                                  \
+                    MAX_EXPR, ZERO)                                            \
   struct NAME {                                                                \
     using NativeType = CPP_TYPE;                                               \
     NativeType value;                                                          \
@@ -42,10 +42,9 @@ template <TypeKind K> struct TypeTraits;
     static constexpr bool is_signed = IS_SIGNED;                               \
     static constexpr bool is_floating = IS_FLOAT;                              \
     static constexpr bool is_integral = !IS_FLOAT;                             \
-                                                                               \
     __host__ __device__ static constexpr CPP_TYPE min() { return MIN_EXPR; }   \
     __host__ __device__ static constexpr CPP_TYPE max() { return MAX_EXPR; }   \
-                                                                               \
+    __host__ __device__ static constexpr CPP_TYPE zero() { return ZERO; }      \
     __host__ __device__ operator NativeType() const { return value; }          \
   };                                                                           \
                                                                                \
@@ -59,45 +58,46 @@ template <TypeKind K> struct TypeTraits;
     static constexpr unsigned int size_bytes = sizeof(CPP_TYPE);               \
     __host__ __device__ static constexpr CPP_TYPE min() { return MIN_EXPR; }   \
     __host__ __device__ static constexpr CPP_TYPE max() { return MAX_EXPR; }   \
+    __host__ __device__ static constexpr CPP_TYPE zero() { return ZERO; }      \
   };
 
-DEFINE_TYPE(Bool, bool, sizeof(bool), false, false, false, true)
+DEFINE_TYPE(Bool, bool, sizeof(bool), false, false, false, true, false)
 DEFINE_TYPE(Int8, int8_t, sizeof(int8_t), true, false,
             std::numeric_limits<int8_t>::min(),
-            std::numeric_limits<int8_t>::max())
+            std::numeric_limits<int8_t>::max(), 0)
 DEFINE_TYPE(UInt8, uint8_t, sizeof(uint8_t), false, false,
             std::numeric_limits<uint8_t>::min(),
-            std::numeric_limits<uint8_t>::max())
+            std::numeric_limits<uint8_t>::max(), 0)
 DEFINE_TYPE(Int16, int16_t, sizeof(int16_t), true, false,
             std::numeric_limits<int16_t>::min(),
-            std::numeric_limits<int16_t>::max())
+            std::numeric_limits<int16_t>::max(), 0)
 DEFINE_TYPE(UInt16, uint16_t, sizeof(uint16_t), false, false,
             std::numeric_limits<uint16_t>::min(),
-            std::numeric_limits<uint16_t>::max())
+            std::numeric_limits<uint16_t>::max(), 0)
 DEFINE_TYPE(Int32, int32_t, sizeof(int32_t), true, false,
             std::numeric_limits<int32_t>::min(),
-            std::numeric_limits<int32_t>::max())
+            std::numeric_limits<int32_t>::max(), 0)
 DEFINE_TYPE(UInt32, uint32_t, sizeof(uint32_t), false, false,
             std::numeric_limits<uint32_t>::min(),
-            std::numeric_limits<uint32_t>::max())
+            std::numeric_limits<uint32_t>::max(), 0)
 DEFINE_TYPE(Int64, int64_t, sizeof(int64_t), true, false,
             std::numeric_limits<int64_t>::min(),
-            std::numeric_limits<int64_t>::max())
+            std::numeric_limits<int64_t>::max(), 0)
 DEFINE_TYPE(UInt64, uint64_t, sizeof(uint64_t), false, false,
             std::numeric_limits<uint64_t>::min(),
-            std::numeric_limits<uint64_t>::max())
+            std::numeric_limits<uint64_t>::max(), 0)
 DEFINE_TYPE(BFloat16, bfloat16, sizeof(bfloat16), true, true,
             std::numeric_limits<bfloat16>::min(),
-            std::numeric_limits<bfloat16>::max())
+            std::numeric_limits<bfloat16>::max(), 0.0)
 DEFINE_TYPE(Float16, float16, sizeof(float16), true, true,
             std::numeric_limits<float16>::min(),
-            std::numeric_limits<float16>::max())
+            std::numeric_limits<float16>::max(), 0.0)
 DEFINE_TYPE(Float32, float, sizeof(float), true, true,
             std::numeric_limits<float>::min(),
-            std::numeric_limits<float>::max())
+            std::numeric_limits<float>::max(), 0.0)
 DEFINE_TYPE(Float64, double, sizeof(double), true, true,
             std::numeric_limits<double>::min(),
-            std::numeric_limits<double>::max())
+            std::numeric_limits<double>::max(), 0.0)
 
 #undef DEFINE_TYPE
 
