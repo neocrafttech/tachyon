@@ -21,15 +21,15 @@ pub enum Device {
     GPU,
 }
 
-pub fn evaluate(
+pub async fn evaluate(
     device: Device, error_mode: ErrorMode, expr: &Expr, columns: &[Column],
 ) -> Result<Vec<Column>, Box<dyn Error>> {
     match device {
-        Device::GPU => evaluate_gpu(expr, error_mode, columns),
+        Device::GPU => evaluate_gpu(expr, error_mode, columns).await,
     }
 }
 
-fn evaluate_gpu(
+async fn evaluate_gpu(
     expr: &Expr, error_mode: ErrorMode, columns: &[Column],
 ) -> Result<Vec<Column>, Box<dyn Error>> {
     let column_map: HashMap<String, (u16, DataType)> = columns
@@ -56,7 +56,7 @@ fn evaluate_gpu(
     )?;
     output_cols.push(gpu_col);
 
-    cuda_launcher::launch(code_block.code(), &input_cols, &output_cols)?;
+    cuda_launcher::launch(code_block.code(), &input_cols, &output_cols).await?;
 
     let result_cols = output_cols
         .into_iter()

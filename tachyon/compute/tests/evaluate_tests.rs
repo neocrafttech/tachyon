@@ -1,14 +1,8 @@
-use core::data_type::DataType;
-use core::error::ErrorMode;
-use core::evaluate::{Device, evaluate};
-use core::expr::Expr;
-use core::operator::Operator;
-
 use arrow::datatypes::{
     ArrowPrimitiveType, Float16Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type,
     Int64Type, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
 };
-use half::{bf16, f16};
+use half::f16;
 
 pub trait ArrowMapper {
     type ArrowType: ArrowPrimitiveType;
@@ -96,8 +90,9 @@ macro_rules! random_num {
 #[macro_export]
 macro_rules! create_column {
     ($vec:expr, $name:expr, $data_type:expr) => {{
-        use core::column::{Column, VecArray};
         use std::sync::Arc;
+
+        use compute::column::{Column, VecArray};
         let arr = Arc::new(VecArray { data: $vec.clone(), datatype: $data_type });
         Column::new($name, arr, None)
     }};
@@ -147,15 +142,14 @@ macro_rules! test_eval_binary_fn {
         $value_max:expr
     ) => {
         #[cfg(feature = "gpu")]
-        #[test]
-        fn $test_name() {
-            use core::data_type::DataType;
-            use core::error::ErrorMode;
-            use core::evaluate::{Device, evaluate};
-            use core::expr::Expr;
-            use core::operator::Operator;
-
+        #[tokio::test]
+        async fn $test_name() {
             use arrow::array::{Array, PrimitiveArray};
+            use compute::data_type::DataType;
+            use compute::error::ErrorMode;
+            use compute::evaluate::{Device, evaluate};
+            use compute::expr::Expr;
+            use compute::operator::Operator;
             let size = random_num!($size_min, $size_max);
             let a_vec: Vec<$native_type> = random_vec!(size, $native_type, $value_min, $value_max);
             let b_vec: Vec<$native_type> = random_vec!(size, $native_type, $value_min, $value_max);
@@ -165,7 +159,7 @@ macro_rules! test_eval_binary_fn {
 
             let expr = Expr::binary($operator, Expr::col("a"), Expr::col("b"));
 
-            let result = evaluate(Device::GPU, $error_mode, &expr, &vec![col_a, col_b]);
+            let result = evaluate(Device::GPU, $error_mode, &expr, &vec![col_a, col_b]).await;
 
             let epsilon = if $data_type.is_float() { 1e-6 } else { 0.0 };
             let arrow_a =
@@ -265,13 +259,13 @@ macro_rules! test_eval_binary_cmp_fn {
         $value_max:expr
     ) => {
         #[cfg(feature = "gpu")]
-        #[test]
-        fn $test_name() {
-            use core::data_type::DataType;
-            use core::error::ErrorMode;
-            use core::evaluate::{Device, evaluate};
-            use core::expr::Expr;
-            use core::operator::Operator;
+        #[tokio::test]
+        async fn $test_name() {
+            use compute::data_type::DataType;
+            use compute::error::ErrorMode;
+            use compute::evaluate::{Device, evaluate};
+            use compute::expr::Expr;
+            use compute::operator::Operator;
             let size = random_num!($size_min, $size_max);
             let a_vec: Vec<$native_type> = random_vec!(size, $native_type, $value_min, $value_max);
             let b_vec: Vec<$native_type> = random_vec!(size, $native_type, $value_min, $value_max);
@@ -281,7 +275,7 @@ macro_rules! test_eval_binary_cmp_fn {
 
             let expr = Expr::binary($operator, Expr::col("a"), Expr::col("b"));
 
-            let result = evaluate(Device::GPU, $error_mode, &expr, &vec![col_a, col_b]);
+            let result = evaluate(Device::GPU, $error_mode, &expr, &vec![col_a, col_b]).await;
             assert!(result.is_ok());
             let result = result.unwrap();
             assert!(result[0].data_as_slice::<bool>().is_some());
@@ -541,8 +535,15 @@ test_eval_binary_cmp_matrix!(
 );
 
 #[cfg(feature = "gpu")]
-#[test]
-fn test_div_by_zero() {
+#[tokio::test]
+async fn test_div_by_zero() {
+    use compute::data_type::DataType;
+    use compute::error::ErrorMode;
+    use compute::evaluate::{Device, evaluate};
+    use compute::expr::Expr;
+    use compute::operator::Operator;
+    use half::bf16;
+
     let a_vec: Vec<bf16> = vec![bf16::from_f32(1.0), bf16::from_f32(2.0), bf16::from_f32(3.0)];
     let b_vec: Vec<bf16> = vec![bf16::from_f32(1.0), bf16::from_f32(0.0), bf16::from_f32(2.0)];
     let col_a = create_column!(a_vec, "a", DataType::BF16);
@@ -550,8 +551,8 @@ fn test_div_by_zero() {
 
     let expr = Expr::binary(Operator::Div, Expr::col("a"), Expr::col("b"));
 
-    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]);
+    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
 
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "CUDA error: 5");
+    assert_eq!(result.unwrap_err().to_string(), "CUDA error: Kernel Error: Division by zero");
 }

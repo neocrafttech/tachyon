@@ -11,6 +11,8 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+use crate::ffi::cuda_error::{CudaError, CudaResult};
+
 #[derive(Debug, thiserror::Error)]
 pub enum CacheError {
     #[error("I/O error: {0}")]
@@ -65,19 +67,16 @@ impl KernelCache {
         self.memory_cache.contains_key(kernel_name) || self.cache_path(kernel_name).exists()
     }
 
-    fn load(&mut self, kernel_name: &str) -> Result<Vec<u8>, CacheError> {
-        if let Some(kernel) = self.memory_cache.get(kernel_name) {
-            return Ok(kernel.clone());
+    fn load(&mut self, kernel_name: &str) -> Result<&[u8], CacheError> {
+        if !self.memory_cache.contains_key(kernel_name) {
+            let path = self.cache_path(kernel_name);
+            let mut file = fs::File::open(&path)?;
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer)?;
+            self.memory_cache.insert(kernel_name.to_string(), buffer);
         }
 
-        let path = self.cache_path(kernel_name);
-        let mut file = fs::File::open(&path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-
-        self.memory_cache.insert(kernel_name.to_string(), buffer.clone());
-
-        Ok(buffer)
+        Ok(&self.memory_cache[kernel_name])
     }
 
     fn save(&mut self, kernel_name: &str, kernel_data: &[u8]) -> Result<(), CacheError> {
@@ -90,21 +89,24 @@ impl KernelCache {
         Ok(())
     }
 
-    pub fn get_or_compile<F>(&mut self, kernel_name: &str, compile_fn: F) -> Result<Vec<u8>, String>
+    pub fn get_or_compile<F>(&mut self, kernel_name: &str, compile_fn: F) -> CudaResult<&[u8]>
     where
-        F: FnOnce() -> Result<Vec<u8>, String>,
+        F: FnOnce() -> CudaResult<Vec<u8>>,
     {
         if self.exists(kernel_name) {
-            return self.load(kernel_name).map_err(|e| format!("Failed to load kernel: {:?}", e));
+            return self
+                .load(kernel_name)
+                .map_err(|e| CudaError::Other(format!("Failed to load kernel: {:?}", e)));
         }
 
         println!("Compiling kernel: {}", kernel_name);
         let kernel_data = compile_fn()?;
 
         self.save(kernel_name, &kernel_data)
-            .map_err(|e| format!("Failed to save kernel: {:?}", e))?;
+            .map_err(|e| CudaError::Other(format!("Failed to save kernel: {:?}", e)))?;
 
-        Ok(kernel_data)
+        self.load(kernel_name)
+            .map_err(|e| CudaError::Other(format!("Failed to load kernel: {:?}", e)))
     }
 
     fn clear_memory_cache(&mut self) {
@@ -129,12 +131,13 @@ impl KernelCache {
     }
 }
 
-pub fn get_or_compile_kernel<F>(kernel_name: &str, compile_fn: F) -> Result<Vec<u8>, String>
+pub fn get_or_compile_kernel<F>(kernel_name: &str, compile_fn: F) -> CudaResult<Vec<u8>>
 where
-    F: FnOnce() -> Result<Vec<u8>, String>,
+    F: FnOnce() -> CudaResult<Vec<u8>>,
 {
     let mut cache = KernelCache::global().lock().unwrap();
-    cache.get_or_compile(kernel_name, compile_fn)
+    let data = cache.get_or_compile(kernel_name, compile_fn)?;
+    Ok(data.to_vec())
 }
 
 #[allow(dead_code)]

@@ -32,7 +32,7 @@ __device__ __forceinline__ T add(C *__restrict__ ctx, const T &a, const T &b) {
       bool overflow = __check_add_overflow(a.value, b.value, &result.value);
       if (__builtin_expect(overflow, 0)) {
         result.valid = false;
-        ctx[0].error_code = ErrorCode::ADD_OVERFLOW;
+        ctx[0].error_code = KernelError::ADD_OVERFLOW;
 
         return result;
       }
@@ -65,7 +65,7 @@ __device__ __forceinline__ T sub(C *__restrict__ ctx, const T &a, const T &b) {
       bool overflow = __check_sub_overflow(a.value, b.value, &result.value);
       if (__builtin_expect(overflow, 0)) {
         result.valid = false;
-        ctx[0].error_code = ErrorCode::SUB_OVERFLOW;
+        ctx[0].error_code = KernelError::SUB_OVERFLOW;
 
         return result;
       }
@@ -149,7 +149,7 @@ __device__ __forceinline__ T mul(C *__restrict__ ctx, const T &a, const T &b) {
 
       if (__builtin_expect(overflow, 0)) {
         result.valid = false;
-        ctx[0].error_code = ErrorCode::MUL_OVERFLOW;
+        ctx[0].error_code = KernelError::MUL_OVERFLOW;
 
         return result;
       }
@@ -169,7 +169,7 @@ __device__ __forceinline__ T div(C *__restrict__ ctx, const T &a, const T &b) {
   if (__builtin_expect(result.valid, 1)) {
     if (__builtin_expect(b.value == b.zero(), 0)) {
       result.valid = false;
-      ctx[0].error_code = ErrorCode::DIV_BY_ZERO;
+      ctx[0].error_code = KernelError::DIV_BY_ZERO;
       return result;
     }
 
@@ -178,7 +178,7 @@ __device__ __forceinline__ T div(C *__restrict__ ctx, const T &a, const T &b) {
 
       if (__builtin_expect(overflow, 0)) {
         result.valid = false;
-        ctx[0].error_code = ErrorCode::DIV_OVERFLOW;
+        ctx[0].error_code = KernelError::DIV_OVERFLOW;
         return result;
       }
 
@@ -313,7 +313,7 @@ __device__ __forceinline__ T mod(C *__restrict__ ctx, const T &a, const T &b) {
   if (__builtin_expect(result.valid, 1)) {
     if (__builtin_expect(b.value == 0, 0)) {
       result.valid = false;
-      ctx[0].error_code = ErrorCode::MOD_BY_ZERO;
+      ctx[0].error_code = KernelError::MOD_BY_ZERO;
       return result;
     }
 
@@ -322,7 +322,7 @@ __device__ __forceinline__ T mod(C *__restrict__ ctx, const T &a, const T &b) {
 
       if (__builtin_expect(overflow, 0)) {
         result.valid = false;
-        ctx[0].error_code = ErrorCode::MOD_OVERFLOW;
+        ctx[0].error_code = KernelError::MOD_OVERFLOW;
         return result;
       }
 

@@ -7,25 +7,26 @@
 
 use std::error::Error;
 
-use crate::ffi::memory::*;
-
+use crate::ffi::memory::gpu_memory::{GpuMemory, MemoryType};
 pub struct Column {
-    data_memory: DeviceMemory,
-    validity_memory: Option<DeviceMemory>,
+    data_memory: GpuMemory,
+    validity_memory: Option<GpuMemory>,
     pub num_rows: usize,
 }
 
 impl Column {
     pub fn new<T, B>(data: &[T], null_bits: Option<&[B]>) -> Result<Self, Box<dyn Error>>
     where
-        T: Clone + Sized,
-        B: Clone + Sized,
+        T: Sized,
+        B: Sized,
     {
-        let data_memory = DeviceMemory::from_slice(data)
+        let memory_type = MemoryType::Device;
+        let data_memory = memory_type
+            .allocate_from_slice(data)
             .map_err(|e| format!("Failed to allocate device memory for data: {}", e))?;
 
         let validity_memory = if let Some(null_bits) = null_bits {
-            let device_bitmap = DeviceMemory::from_slice(null_bits).map_err(|e| {
+            let device_bitmap = memory_type.allocate_from_slice(null_bits).map_err(|e| {
                 format!("Failed to allocate device memory for validity bitmap: {}", e)
             })?;
             Some(device_bitmap)
@@ -40,13 +41,15 @@ impl Column {
         data_len: usize, null_bits_len: usize, num_rows: usize,
     ) -> Result<Self, Box<dyn Error>> {
         assert!(data_len > 0, "Cannot allocate zero-sized memory block.");
+        let memory_type = MemoryType::Device;
 
-        let data_memory = DeviceMemory::new(data_len)
+        let data_memory = memory_type
+            .allocate(data_len)
             .map_err(|e| format!("Failed to allocate device memory for data: {}", e))?;
 
         let validity_memory = if null_bits_len > 0 {
-            let validity_memory = DeviceMemory::new(null_bits_len * std::mem::size_of::<u64>())
-                .map_err(|e| {
+            let validity_memory =
+                memory_type.allocate(null_bits_len * std::mem::size_of::<u64>()).map_err(|e| {
                     format!("Failed to allocate device memory for validity bitmap: {}", e)
                 })?;
             Some(validity_memory)
@@ -70,13 +73,13 @@ impl Column {
         }
     }
 
-    pub fn host_data<T: Clone + Sized>(&self) -> Result<Vec<T>, Box<dyn Error>> {
+    pub fn host_data<T: Sized>(&self) -> Result<Vec<T>, Box<dyn Error>> {
         self.data_memory
             .to_vec::<T>()
             .map_err(|e| format!("Failed to copy data from device: {}", e).into())
     }
 
-    pub fn host_bitmap<B: Clone + Sized>(&self) -> Result<Option<Vec<B>>, Box<dyn Error>> {
+    pub fn host_bitmap<B: Sized>(&self) -> Result<Option<Vec<B>>, Box<dyn Error>> {
         self.validity_memory
             .as_ref()
             .map(|vm| {
@@ -88,7 +91,7 @@ impl Column {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub struct ColumnFFI {
     pub data: *const std::os::raw::c_void,
     pub null_bits: *const u64,
