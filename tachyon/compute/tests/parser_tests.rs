@@ -1,6 +1,6 @@
-use core::expr::Expr;
-use core::operator::Operator;
-use core::parser::parse_scheme_expr;
+use compute::expr::Expr;
+use compute::operator::Operator;
+use compute::parser::parse_scheme_expr;
 
 macro_rules! test_parser_matrix {
     (

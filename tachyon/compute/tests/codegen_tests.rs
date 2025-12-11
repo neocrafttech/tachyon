@@ -1,8 +1,7 @@
-use core::codegen::{CodeBlock, CodeGen, float_literal_to_str};
-use core::data_type::DataType;
-use core::expr::{Expr, SchemaContext};
-use core::operator::Operator;
-
+use compute::codegen::{CodeBlock, CodeGen, float_literal_to_str};
+use compute::data_type::DataType;
+use compute::expr::{Expr, SchemaContext};
+use compute::operator::Operator;
 use half::{bf16, f16};
 
 macro_rules! define_type_test {

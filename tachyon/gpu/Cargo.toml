@@ -15,6 +15,7 @@ default = []
 gpu = []
 
 [dependencies]
+tokio.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 indoc.workspace = true
@@ -22,3 +23,6 @@ dirs.workspace = true
 
 [dev-dependencies]
 rand.workspace = true
+
+[build-dependencies]
+cc = "1.0"

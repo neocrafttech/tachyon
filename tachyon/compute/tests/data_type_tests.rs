@@ -1,4 +1,4 @@
-use core::data_type::DataType;
+use compute::data_type::DataType;
 
 macro_rules! matrix_test {
     ($test_fn:ident) => {{

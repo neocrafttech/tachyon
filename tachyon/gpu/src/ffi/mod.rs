@@ -6,6 +6,7 @@
  */
 
 pub mod column;
+pub(crate) mod cuda_error;
 pub(crate) mod cuda_runtime;
 #[allow(dead_code)]
 pub(crate) mod memory;
