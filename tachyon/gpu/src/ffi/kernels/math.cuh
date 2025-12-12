@@ -173,20 +173,17 @@ __device__ __forceinline__ T div(C *__restrict__ ctx, const T &a, const T &b) {
       return result;
     }
 
-    if constexpr (ErrorMode) {
-      bool overflow = (a.value == a.min() && b.value == -1);
+    // Irrespective of error mode overflow is error for division, no wrapping
+    // like other operations
+    bool overflow = (a.value == a.min() && b.value == static_cast<T>(-1));
 
-      if (__builtin_expect(overflow, 0)) {
-        result.valid = false;
-        ctx[0].error_code = KernelError::DIV_OVERFLOW;
-        return result;
-      }
-
-      result.value = a.value / b.value;
-
-    } else {
-      result.value = a.value / b.value;
+    if (__builtin_expect(overflow, 0)) {
+      result.valid = false;
+      ctx[0].error_code = KernelError::DIV_OVERFLOW;
+      return result;
     }
+
+    result.value = a.value / b.value;
   }
 
   return result;

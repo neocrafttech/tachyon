@@ -37,7 +37,7 @@ impl Column {
         Ok(Column { data_memory, validity_memory, num_rows: data.len() })
     }
 
-    pub fn new_uninitialized(
+    pub fn new_uninitialized<B: Sized>(
         data_len: usize, null_bits_len: usize, num_rows: usize,
     ) -> Result<Self, Box<dyn Error>> {
         assert!(data_len > 0, "Cannot allocate zero-sized memory block.");
@@ -49,7 +49,7 @@ impl Column {
 
         let validity_memory = if null_bits_len > 0 {
             let validity_memory =
-                memory_type.allocate(null_bits_len * std::mem::size_of::<u64>()).map_err(|e| {
+                memory_type.allocate(null_bits_len * std::mem::size_of::<B>()).map_err(|e| {
                     format!("Failed to allocate device memory for validity bitmap: {}", e)
                 })?;
             Some(validity_memory)
@@ -60,7 +60,15 @@ impl Column {
         Ok(Column { data_memory, validity_memory, num_rows })
     }
 
-    pub fn as_ffi_column(&self) -> ColumnFFI {
+    pub fn len(&self) -> usize {
+        self.num_rows
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn as_ffi_column<B: Sized>(&self) -> ColumnFFI<B> {
         let data_ptr = self.data_memory.device_ptr();
 
         let validity_ptr =
@@ -68,7 +76,7 @@ impl Column {
 
         ColumnFFI {
             data: data_ptr as *const std::os::raw::c_void,
-            null_bits: validity_ptr as *const u64,
+            null_bits: validity_ptr as *const B,
             size: self.data_memory.len(),
         }
     }
@@ -92,8 +100,8 @@ impl Column {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct ColumnFFI {
+pub struct ColumnFFI<B: Sized> {
     pub data: *const std::os::raw::c_void,
-    pub null_bits: *const u64,
+    pub null_bits: *const B,
     pub size: usize,
 }
