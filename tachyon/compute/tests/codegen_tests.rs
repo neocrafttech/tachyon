@@ -76,7 +76,7 @@ macro_rules! test_codegen_literal {
             assert_eq!(ty, $datatype);
 
             let mut code_block = CodeBlock::default();
-            expr.to_nvrtc(&schema, &mut code_block).expect("codegen");
+            expr.to_nvrtc::<u64>(&schema, &mut code_block).expect("codegen");
 
             println!("Generated Code:\n{}", code_block.code());
 
@@ -92,7 +92,7 @@ test_codegen_literal!(
     expected = r#"Int8 var0;
         	var0.valid = true;
         	var0.value = (int8_t)10;
-        	output[0].store<TypeKind::Int8>(row_idx, var0);"#
+        	output[0].store<TypeKind::Int8, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -103,7 +103,7 @@ test_codegen_literal!(
     expected = r#"Int16 var0;
         	var0.valid = true;
         	var0.value = (int16_t)1000;
-        	output[0].store<TypeKind::Int16>(row_idx, var0);"#
+        	output[0].store<TypeKind::Int16, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -114,7 +114,7 @@ test_codegen_literal!(
     expected = r#"Int32 var0;
         	var0.valid = true;
         	var0.value = (int32_t)-123;
-        	output[0].store<TypeKind::Int32>(row_idx, var0);"#
+        	output[0].store<TypeKind::Int32, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -125,7 +125,7 @@ test_codegen_literal!(
     expected = r#"Int64 var0;
         	var0.valid = true;
         	var0.value = (int64_t)12334444ll;
-        	output[0].store<TypeKind::Int64>(row_idx, var0);"#
+        	output[0].store<TypeKind::Int64, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -136,7 +136,7 @@ test_codegen_literal!(
     expected = r#"	UInt8 var0;
        	var0.valid = true;
        	var0.value = (uint8_t)10;
-       	output[0].store<TypeKind::UInt8>(row_idx, var0);"#
+       	output[0].store<TypeKind::UInt8, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -147,7 +147,7 @@ test_codegen_literal!(
     expected = r#"UInt16 var0;
         	var0.valid = true;
         	var0.value = (uint16_t)1000;
-        	output[0].store<TypeKind::UInt16>(row_idx, var0);"#
+        	output[0].store<TypeKind::UInt16, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -158,7 +158,7 @@ test_codegen_literal!(
     expected = r#"UInt32 var0;
         	var0.valid = true;
         	var0.value = (uint32_t)5667777u;
-        	output[0].store<TypeKind::UInt32>(row_idx, var0);"#
+        	output[0].store<TypeKind::UInt32, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -169,7 +169,7 @@ test_codegen_literal!(
     expected = r#"UInt64 var0;
         	var0.valid = true;
         	var0.value = (uint64_t)100000000ull;
-        	output[0].store<TypeKind::UInt64>(row_idx, var0);"#
+        	output[0].store<TypeKind::UInt64, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -180,7 +180,7 @@ test_codegen_literal!(
     expected = r#"BFloat16 var0;
        	var0.valid = true;
        	var0.value = (bfloat16)(__float2bfloat16(2.0f));
-       	output[0].store<TypeKind::BFloat16>(row_idx, var0);"#
+       	output[0].store<TypeKind::BFloat16, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -191,7 +191,7 @@ test_codegen_literal!(
     expected = r#"Float16 var0;
         	var0.valid = true;
         	var0.value = (float16)(__float2half(1.5f));
-        	output[0].store<TypeKind::Float16>(row_idx, var0);"#
+        	output[0].store<TypeKind::Float16, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -202,7 +202,7 @@ test_codegen_literal!(
     expected = r#"Float32 var0;
         	var0.valid = true;
         	var0.value = (float)1.5f;
-        	output[0].store<TypeKind::Float32>(row_idx, var0);"#
+        	output[0].store<TypeKind::Float32, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -213,7 +213,7 @@ test_codegen_literal!(
     expected = r#"Float64 var0;
         	var0.valid = true;
         	var0.value = (double)150000000000000000000000000.0;
-        	output[0].store<TypeKind::Float64>(row_idx, var0);"#
+        	output[0].store<TypeKind::Float64, uint64_t>(row_idx, var0);"#
 );
 
 test_codegen_literal!(
@@ -224,7 +224,7 @@ test_codegen_literal!(
     expected = r#"Bool var0;
         	var0.valid = true;
         	var0.value = (bool)false;
-        	output[0].store<TypeKind::Bool>(row_idx, var0);"#
+        	output[0].store<TypeKind::Bool, uint64_t>(row_idx, var0);"#
 );
 
 #[test]
@@ -236,15 +236,15 @@ fn test_codegen_unary() {
     assert_eq!(ty, DataType::F64);
 
     let mut code_block = CodeBlock::default();
-    let _ = expr.to_nvrtc(&schema, &mut code_block).expect("codegen");
+    let _ = expr.to_nvrtc::<u64>(&schema, &mut code_block).expect("codegen");
     println!("Code:");
     println!("{}", code_block.code());
-    let expected = r#"Float64 var0 = input[0].load<TypeKind::Float64>(row_idx);
+    let expected = r#"Float64 var0 = input[0].load<TypeKind::Float64, uint64_t>(row_idx);
         	var1.valid = var0.valid;
         	if (var1.valid) {
         	var1.value = (double)((-(var0.value)).value);
         	}
-        	output[0].store<TypeKind::Float64>(row_idx, var1);"#;
+        	output[0].store<TypeKind::Float64, uint64_t>(row_idx, var1);"#;
     assert_eq!(normalize_code(code_block.code()), normalize_code(expected))
 }
 
@@ -265,17 +265,17 @@ fn test_codegen_binary_same_type_cast() {
     assert_eq!(ty, DataType::F64);
 
     let mut code_block = CodeBlock::default();
-    let _ = expr.to_nvrtc(&schema, &mut code_block).expect("codegen");
+    let _ = expr.to_nvrtc::<u64>(&schema, &mut code_block).expect("codegen");
     println!("Code:");
     println!("{}", code_block.code());
-    let expected = r#"Float64 var0 = input[0].load<TypeKind::Float64>(row_idx);
+    let expected = r#"Float64 var0 = input[0].load<TypeKind::Float64, uint64_t>(row_idx);
        	Float32 var1;
        	var1.valid = true;
        	var1.value = (float)2.5f;
        	Float64 var2 = math::mul<false>(ctx, var0, var1);
-       	Float64 var3 = input[1].load<TypeKind::Float64>(row_idx);
+       	Float64 var3 = input[1].load<TypeKind::Float64, uint64_t>(row_idx);
        	Float64 var4 = math::add<false>(ctx, var2, var3);
-       	output[0].store<TypeKind::Float64>(row_idx, var4);"#;
+       	output[0].store<TypeKind::Float64, uint64_t>(row_idx, var4);"#;
     assert_eq!(normalize_code(code_block.code()), normalize_code(expected))
 }
 
@@ -296,22 +296,22 @@ fn test_codegen_binary_different_type_cast() {
     assert_eq!(ty, DataType::F64);
 
     let mut code_block = CodeBlock::default();
-    let _ = expr.to_nvrtc(&schema, &mut code_block).expect("codegen");
+    let _ = expr.to_nvrtc::<u64>(&schema, &mut code_block).expect("codegen");
     println!("Code:");
     println!("{}", code_block.code());
-    let expected = r#" 	Float64 var0 = input[0].load<TypeKind::Float64>(row_idx);
+    let expected = r#" 	Float64 var0 = input[0].load<TypeKind::Float64, uint64_t>(row_idx);
        	Float32 var1;
        	var1.valid = true;
        	var1.value = (float)2.5f;
        	Float64 var2 = math::mul<false>(ctx, var0, var1);
-       	Int64 var3 = input[1].load<TypeKind::Int64>(row_idx);
+       	Int64 var3 = input[1].load<TypeKind::Int64, uint64_t>(row_idx);
        	Float32 var4;
        	var4.valid = var3.valid;
        	if (var4) {
        	var4.value = (float)(var3.value)
        	}
        	Float64 var5 = math::add<false>(ctx, var2, var4);
-       	output[0].store<TypeKind::Float64>(row_idx, var5);"#;
+       	output[0].store<TypeKind::Float64, uint64_t>(row_idx, var5);"#;
     assert_eq!(normalize_code(code_block.code()), normalize_code(expected))
 }
 

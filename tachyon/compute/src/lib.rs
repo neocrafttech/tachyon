@@ -5,6 +5,7 @@
  * as found in the LICENSE file in the root directory of this source tree.
  */
 
+pub mod bit_vector;
 pub mod codegen;
 pub mod column;
 pub mod data_type;

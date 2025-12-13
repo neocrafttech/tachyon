@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 
+use crate::bit_vector::BitBlock;
 use crate::data_type::DataType;
 use crate::error::ErrorMode;
 use crate::expr::{Expr, Literal, SchemaContext, TypeError};
@@ -49,14 +50,15 @@ impl CodeBlock {
         self.add_code("\t}\n")
     }
 
-    pub fn add_load_column<'a>(
+    pub fn add_load_column<'a, B: BitBlock>(
         &'a mut self, col_name: &str, col_idx: u16, col_type: &DataType,
     ) -> &'a str {
         if !self.column_var_map.contains_key(col_name) {
             let var = self.next_var();
             let kernel_type = col_type.kernel_type();
+            let bits_type = B::C_TYPE;
             let code = format!(
-                "\t{kernel_type} {var} = input[{col_idx}].load<TypeKind::{kernel_type}>(row_idx);\n"
+                "\t{kernel_type} {var} = input[{col_idx}].load<TypeKind::{kernel_type}, {bits_type}>(row_idx);\n"
             );
             self.add_code(&code);
             self.column_var_map.insert(col_name.to_string(), var);
@@ -65,9 +67,12 @@ impl CodeBlock {
         self.column_var_map.get(col_name).unwrap()
     }
 
-    pub fn add_store_column(&mut self, col_idx: u16, col_type: &DataType, var: &str) {
+    pub fn add_store_column<B: BitBlock>(&mut self, col_idx: u16, col_type: &DataType, var: &str) {
         let kernel_type = col_type.kernel_type();
-        let code = format!("\toutput[{col_idx}].store<TypeKind::{kernel_type}>(row_idx, {var});\n");
+        let bits_type = B::C_TYPE;
+        let code = format!(
+            "\toutput[{col_idx}].store<TypeKind::{kernel_type}, {bits_type}>(row_idx, {var});\n"
+        );
         self.add_code(&code);
     }
 
@@ -83,24 +88,25 @@ impl CodeBlock {
 }
 
 pub trait CodeGen {
-    fn to_nvrtc(&self, schema: &SchemaContext, code_block: &mut CodeBlock)
-    -> Result<(), TypeError>;
-    fn build_nvrtc_code(
+    fn to_nvrtc<B: BitBlock>(
+        &self, schema: &SchemaContext, code_block: &mut CodeBlock,
+    ) -> Result<(), TypeError>;
+    fn build_nvrtc_code<B: BitBlock>(
         &self, schema: &SchemaContext, code_block: &mut CodeBlock,
     ) -> Result<String, TypeError>;
 }
 
 impl CodeGen for Expr {
-    fn to_nvrtc(
+    fn to_nvrtc<B: BitBlock>(
         &self, schema: &SchemaContext, code_block: &mut CodeBlock,
     ) -> Result<(), TypeError> {
         let result_type = self.infer_type(schema)?;
-        let res = self.build_nvrtc_code(schema, code_block)?;
-        code_block.add_store_column(0, &result_type, &res);
+        let res = self.build_nvrtc_code::<B>(schema, code_block)?;
+        code_block.add_store_column::<B>(0, &result_type, &res);
         Ok(())
     }
 
-    fn build_nvrtc_code(
+    fn build_nvrtc_code<B: BitBlock>(
         &self, schema: &SchemaContext, code_block: &mut CodeBlock,
     ) -> Result<String, TypeError> {
         let result_type = self.infer_type(schema)?;
@@ -112,7 +118,7 @@ impl CodeGen for Expr {
                     Some(pair) => pair,
                     None => Err(TypeError::Unsupported(col_name.to_string()))?,
                 };
-                let var = code_block.add_load_column(col_name, *col_idx, col_type);
+                let var = code_block.add_load_column::<B>(col_name, *col_idx, col_type);
                 var.to_string()
             }
             Expr::Literal(l) => {
@@ -143,7 +149,7 @@ impl CodeGen for Expr {
                 var
             }
             Expr::Unary { op, expr } => {
-                let e_var = expr.build_nvrtc_code(schema, code_block)?;
+                let e_var = expr.build_nvrtc_code::<B>(schema, code_block)?;
                 let value = match op {
                     Operator::Neg => format!("(-({}.value))", e_var),
                     Operator::Not => format!("(!({}.value))", e_var),
@@ -163,8 +169,8 @@ impl CodeGen for Expr {
                 var
             }
             Expr::Binary { op, left, right } => {
-                let l_var = left.build_nvrtc_code(schema, code_block)?;
-                let r_var = right.build_nvrtc_code(schema, code_block)?;
+                let l_var = left.build_nvrtc_code::<B>(schema, code_block)?;
+                let r_var = right.build_nvrtc_code::<B>(schema, code_block)?;
                 if op.is_binary() {
                     let var = code_block.next_var();
                     let kernel_fn = op_kernel_fn(*op);
@@ -187,14 +193,14 @@ impl CodeGen for Expr {
             Expr::Call { name, args } => {
                 let mut arg_strs = Vec::with_capacity(args.len());
                 for a in args {
-                    arg_strs.push(a.build_nvrtc_code(schema, code_block)?);
+                    arg_strs.push(a.build_nvrtc_code::<B>(schema, code_block)?);
                 }
                 let var = code_block.next_var();
                 code_block.add_code(&format!("{}({})", name, arg_strs.join(", ")));
                 var
             }
             Expr::Cast { expr, to } => {
-                let e_var = expr.build_nvrtc_code(schema, code_block)?;
+                let e_var = expr.build_nvrtc_code::<B>(schema, code_block)?;
                 if to.kernel_type() == expr.infer_type(schema)?.kernel_type() {
                     return Ok(e_var);
                 }

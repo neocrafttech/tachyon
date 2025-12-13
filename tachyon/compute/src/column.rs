@@ -12,6 +12,7 @@ use std::sync::Arc;
 use gpu::ffi::column as gpu_column;
 use half::{bf16, f16};
 
+use crate::bit_vector::{BitBlock, BitVector};
 use crate::data_type::DataType;
 pub trait Array: std::fmt::Debug + Send + Sync {
     fn len(&self) -> usize;
@@ -42,11 +43,11 @@ impl<T: 'static + Send + Sync + Debug> Array for VecArray<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Column {
+pub struct Column<B: BitBlock> {
     pub name: String,
     pub data_type: DataType,
     pub values: Arc<dyn Array>,
-    pub null_bits: Option<Vec<u64>>,
+    pub null_bits: Option<BitVector<B>>,
 }
 
 macro_rules! from_gpu_column {
@@ -54,7 +55,7 @@ macro_rules! from_gpu_column {
         Self::new(
             $name,
             Arc::new(VecArray { data: $column.host_data::<$type>()?, datatype: $data_type }),
-            $column.host_bitmap()?,
+            $column.host_bitmap()?.map(|bitmap| BitVector::new(bitmap, $column.len())),
         )
     };
 }
@@ -63,21 +64,16 @@ macro_rules! to_gpu_column {
     ($self:expr, $type:ty) => {
         gpu_column::Column::new(
             $self.data_as_slice::<$type>().ok_or("Failed to cast")?,
-            $self.null_bits_as_slice(),
+            $self.null_bits.as_ref().map(|bits| bits.as_slice()),
         )
     };
 }
 
-impl Column {
+impl<B: BitBlock> Column<B> {
     pub fn new<T: Array + 'static>(
-        name: &str, values: Arc<T>, validity_bits: Option<Vec<u64>>,
+        name: &str, values: Arc<T>, null_bits: Option<BitVector<B>>,
     ) -> Self {
-        Self {
-            name: name.to_string(),
-            data_type: values.data_type(),
-            values,
-            null_bits: validity_bits,
-        }
+        Self { name: name.to_string(), data_type: values.data_type(), values, null_bits }
     }
 
     pub fn len(&self) -> usize {
@@ -137,7 +133,7 @@ impl Column {
         }
     }
 
-    pub fn null_bits_as_slice(&self) -> Option<&[u64]> {
-        self.null_bits.as_deref()
+    pub fn null_bits_as_slice(&self) -> Option<&BitVector<B>> {
+        self.null_bits.as_ref()
     }
 }

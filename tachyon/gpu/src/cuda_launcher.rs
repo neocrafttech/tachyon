@@ -103,7 +103,7 @@ async fn launch_kernel(
     Ok(())
 }
 
-pub async fn launch(code: &str, input: &[Column], output: &[Column]) -> GpuResult<()> {
+pub async fn launch<B: Sized>(code: &str, input: &[Column], output: &[Column]) -> GpuResult<()> {
     cuda::init_cuda()?;
     let device = cuda::get_device(0)?;
 
@@ -112,8 +112,8 @@ pub async fn launch(code: &str, input: &[Column], output: &[Column]) -> GpuResul
     println!("{:#}", kernel_source);
     let kernel = build_or_load_kernel(&kernel_name, &kernel_source, device)?;
 
-    let input_ffi: Vec<ColumnFFI> = input.iter().map(|col| col.as_ffi_column()).collect();
-    let output_ffi: Vec<ColumnFFI> = output.iter().map(|col| col.as_ffi_column()).collect();
+    let input_ffi: Vec<ColumnFFI<B>> = input.iter().map(|col| col.as_ffi_column()).collect();
+    let output_ffi: Vec<ColumnFFI<B>> = output.iter().map(|col| col.as_ffi_column()).collect();
 
     let host_ctx = ContextFFI { error_code: 0 };
     let device_ctx = DeviceMemory::from_slice(&[host_ctx])?;

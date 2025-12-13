@@ -68,15 +68,6 @@ impl ToF64 for f16 {
 }
 
 #[macro_export]
-macro_rules! random_vec {
-    ($size:expr, $ty:ty, $min:expr, $max:expr) => {{
-        use rand::Rng;
-        let mut rng = rand::rng();
-        (0..$size).map(|_| rng.random_range($min..$max)).collect::<Vec<$ty>>()
-    }};
-}
-
-#[macro_export]
 macro_rules! random_num {
     ($min:expr, $max:expr) => {{
         use rand;
@@ -88,13 +79,68 @@ macro_rules! random_num {
 }
 
 #[macro_export]
+macro_rules! random_vec {
+    ($size:expr, $ty:ty, $min:expr, $max:expr) => {{
+        use rand::Rng;
+        let mut rng = rand::rng();
+        (0..$size).map(|_| rng.random_range($min..$max)).collect::<Vec<$ty>>()
+    }};
+}
+
+#[macro_export]
+macro_rules! random_bit_vec {
+    ($size:expr, $ty:ty) => {{
+        use compute::bit_vector::BitVector;
+        use rand;
+        use rand::Rng;
+        let mut rng = rand::rng();
+        const BITS: usize = std::mem::size_of::<$ty>() * 8;
+        let num_blocks = $size.div_ceil(BITS);
+        let mut bits: Vec<$ty> = Vec::with_capacity(num_blocks);
+
+        for _ in 0..(num_blocks.saturating_sub(1)) {
+            let random_block: $ty = rng.random_range(0..=<$ty>::MAX);
+            bits.push(random_block);
+        }
+
+        if num_blocks > 0 {
+            let last_idx = num_blocks - 1;
+            let total_used_bits = last_idx * BITS;
+            let valid_bits_in_last_block = $size - total_used_bits;
+            let last_block: $ty = rng.random_range(0..=<$ty>::MAX);
+
+            if valid_bits_in_last_block < BITS {
+                let low_bits_mask = !(<$ty>::MAX << valid_bits_in_last_block);
+                bits.push(last_block & low_bits_mask);
+            } else {
+                bits.push(last_block);
+            }
+        }
+
+        BitVector::new(bits, $size)
+    }};
+}
+
+#[macro_export]
+macro_rules! create_arrow_array {
+    ($vec:expr, $bit_vec:expr, $native_type:ty) => {{
+        let arrow_vec: Vec<Option<$native_type>> = $vec
+            .iter()
+            .enumerate()
+            .map(|(i, &x)| if $bit_vec.is_valid(i) { Some(x) } else { None })
+            .collect();
+        PrimitiveArray::<<$native_type as ArrowMapper>::ArrowType>::from(arrow_vec)
+    }};
+}
+
+#[macro_export]
 macro_rules! create_column {
-    ($vec:expr, $name:expr, $data_type:expr) => {{
+    ($vec:expr, $bit_vec:expr, $name:expr, $data_type:expr) => {{
         use std::sync::Arc;
 
         use compute::column::{Column, VecArray};
         let arr = Arc::new(VecArray { data: $vec.clone(), datatype: $data_type });
-        Column::new($name, arr, None)
+        Column::new($name, arr, $bit_vec)
     }};
 }
 
@@ -154,18 +200,20 @@ macro_rules! test_eval_binary_fn {
             let a_vec: Vec<$native_type> = random_vec!(size, $native_type, $value_min, $value_max);
             let b_vec: Vec<$native_type> = random_vec!(size, $native_type, $value_min, $value_max);
 
-            let col_a = create_column!(a_vec, "a", $data_type);
-            let col_b = create_column!(b_vec, "b", $data_type);
+            let a_bit_vec = random_bit_vec!(size, u64);
+            let b_bit_vec = random_bit_vec!(size, u64);
+
+            let col_a = create_column!(a_vec, Some(a_bit_vec.clone()), "a", $data_type);
+            let col_b = create_column!(b_vec, Some(b_bit_vec.clone()), "b", $data_type);
 
             let expr = Expr::binary($operator, Expr::col("a"), Expr::col("b"));
 
             let result = evaluate(Device::GPU, $error_mode, &expr, &vec![col_a, col_b]).await;
 
             let epsilon = if $data_type.is_float() { 1e-6 } else { 0.0 };
-            let arrow_a =
-                PrimitiveArray::<<$native_type as ArrowMapper>::ArrowType>::from(a_vec.clone());
-            let arrow_b =
-                PrimitiveArray::<<$native_type as ArrowMapper>::ArrowType>::from(b_vec.clone());
+
+            let arrow_a = create_arrow_array!(a_vec, a_bit_vec, $native_type);
+            let arrow_b = create_arrow_array!(b_vec, b_bit_vec, $native_type);
 
             let arrow_result = $verify_arrow_fn(&arrow_a, &arrow_b);
             match arrow_result {
@@ -179,36 +227,44 @@ macro_rules! test_eval_binary_fn {
 
                     assert!(result[0].data_as_slice::<$result_type>().is_some());
                     let output = result[0].data_as_slice::<$result_type>().unwrap();
+                    let bit_vec = result[0].null_bits_as_slice().unwrap();
                     for i in 0..size {
-                        let expected = arrow_output.value(i).to_f64();
-                        let actual = output[i].to_f64();
-                        let diff = match expected {
-                            f64::INFINITY if actual.is_infinite() && actual.is_sign_positive() => {
-                                0.0
-                            }
-                            f64::NEG_INFINITY
-                                if actual.is_infinite() && actual.is_sign_negative() =>
-                            {
-                                0.0
-                            }
-                            _ => {
-                                if expected > actual {
-                                    expected - actual
-                                } else {
-                                    actual - expected
+                        if a_bit_vec.is_null(i) || b_bit_vec.is_null(i) {
+                            assert!(bit_vec.is_null(i));
+                        } else {
+                            assert!(bit_vec.is_valid(i));
+                            let expected = arrow_output.value(i).to_f64();
+                            let actual = output[i].to_f64();
+                            let diff = match expected {
+                                f64::INFINITY
+                                    if actual.is_infinite() && actual.is_sign_positive() =>
+                                {
+                                    0.0
                                 }
-                            }
-                        };
-                        assert!(
-                            diff <= epsilon as f64,
-                            "Mismatch at index {}: expected {} op {} = {}, got {}, diff {}",
-                            i,
-                            &a_vec[i],
-                            &b_vec[i],
-                            expected,
-                            actual,
-                            diff
-                        );
+                                f64::NEG_INFINITY
+                                    if actual.is_infinite() && actual.is_sign_negative() =>
+                                {
+                                    0.0
+                                }
+                                _ => {
+                                    if expected > actual {
+                                        expected - actual
+                                    } else {
+                                        actual - expected
+                                    }
+                                }
+                            };
+                            assert!(
+                                diff <= epsilon as f64,
+                                "Mismatch at index {}: expected {} op {} = {}, got {}, diff {}",
+                                i,
+                                &a_vec[i],
+                                &b_vec[i],
+                                expected,
+                                actual,
+                                diff
+                            );
+                        }
                     }
                 }
                 _ => assert!(!result.is_ok()),
@@ -270,8 +326,11 @@ macro_rules! test_eval_binary_cmp_fn {
             let a_vec: Vec<$native_type> = random_vec!(size, $native_type, $value_min, $value_max);
             let b_vec: Vec<$native_type> = random_vec!(size, $native_type, $value_min, $value_max);
 
-            let col_a = create_column!(a_vec, "a", $data_type);
-            let col_b = create_column!(b_vec, "b", $data_type);
+            let a_bit_vec = random_bit_vec!(size, u32);
+            let b_bit_vec = random_bit_vec!(size, u32);
+
+            let col_a = create_column!(a_vec, Some(a_bit_vec.clone()), "a", $data_type);
+            let col_b = create_column!(b_vec, Some(b_bit_vec.clone()), "b", $data_type);
 
             let expr = Expr::binary($operator, Expr::col("a"), Expr::col("b"));
 
@@ -280,7 +339,11 @@ macro_rules! test_eval_binary_cmp_fn {
             let result = result.unwrap();
             assert!(result[0].data_as_slice::<bool>().is_some());
             let output = result[0].data_as_slice::<bool>().unwrap();
+            let bit_vec = result[0].null_bits_as_slice().unwrap();
             for i in 0..size {
+                if a_bit_vec.is_null(i) || b_bit_vec.is_null(i) {
+                    assert!(bit_vec.is_null(i));
+                } else {
                 let actual = output[i];
                 let expected = &a_vec[i] $op &b_vec[i];
                 assert_eq!(
@@ -288,6 +351,7 @@ macro_rules! test_eval_binary_cmp_fn {
                     "Mismatch at index {}: expected {} op {} = {}, got {}",
                     i, &a_vec[i], &b_vec[i], expected, actual,
                 );
+            }
             }
         }
     };
@@ -537,6 +601,7 @@ test_eval_binary_cmp_matrix!(
 #[cfg(feature = "gpu")]
 #[tokio::test]
 async fn test_div_by_zero() {
+    use compute::bit_vector::BitVector;
     use compute::data_type::DataType;
     use compute::error::ErrorMode;
     use compute::evaluate::{Device, evaluate};
@@ -546,8 +611,12 @@ async fn test_div_by_zero() {
 
     let a_vec: Vec<bf16> = vec![bf16::from_f32(1.0), bf16::from_f32(2.0), bf16::from_f32(3.0)];
     let b_vec: Vec<bf16> = vec![bf16::from_f32(1.0), bf16::from_f32(0.0), bf16::from_f32(2.0)];
-    let col_a = create_column!(a_vec, "a", DataType::BF16);
-    let col_b = create_column!(b_vec, "b", DataType::BF16);
+
+    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
+    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
+
+    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::BF16);
+    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::BF16);
 
     let expr = Expr::binary(Operator::Div, Expr::col("a"), Expr::col("b"));
 
@@ -555,4 +624,44 @@ async fn test_div_by_zero() {
 
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "CUDA error: Kernel Error: Division by zero");
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_add_with_null() {
+    use compute::bit_vector::BitVector;
+    use compute::data_type::DataType;
+    use compute::error::ErrorMode;
+    use compute::evaluate::{Device, evaluate};
+    use compute::expr::Expr;
+    use compute::operator::Operator;
+    use half::bf16;
+
+    let a_vec: Vec<bf16> =
+        vec![bf16::from_f32(1.0), bf16::from_f32(2.0), bf16::from_f32(3.0), bf16::from_f32(4.0)];
+    let b_vec: Vec<bf16> =
+        vec![bf16::from_f32(3.0), bf16::from_f32(5.0), bf16::from_f32(2.0), bf16::from_f32(1.0)];
+
+    let mut a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
+    let mut b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
+
+    a_bit_vec.set_null(1);
+    a_bit_vec.set_null(2);
+    b_bit_vec.set_null(2);
+    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::BF16);
+    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::BF16);
+
+    let expr = Expr::binary(Operator::Add, Expr::col("a"), Expr::col("b"));
+
+    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
+    let result = result.unwrap();
+    assert!(result[0].data_as_slice::<bf16>().is_some());
+    let output = result[0].data_as_slice::<bf16>().unwrap();
+    let bit_vec = result[0].null_bits_as_slice().unwrap();
+    assert!(bit_vec.is_valid(0));
+    assert!(!bit_vec.is_valid(1));
+    assert!(!bit_vec.is_valid(2));
+    assert!(bit_vec.is_valid(3));
+    assert_eq!(output[0], bf16::from_f32(4.0));
+    assert_eq!(output[3], bf16::from_f32(5.0));
 }
