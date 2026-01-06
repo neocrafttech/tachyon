@@ -100,8 +100,9 @@ impl CodeGen for Expr {
     fn to_nvrtc<B: BitBlock>(
         &self, schema: &SchemaContext, code_block: &mut CodeBlock,
     ) -> Result<(), TypeError> {
-        let result_type = self.infer_type(schema)?;
-        let res = self.build_nvrtc_code::<B>(schema, code_block)?;
+        let expr = self.simplify(schema)?;
+        let result_type = expr.infer_type(schema)?;
+        let res = expr.build_nvrtc_code::<B>(schema, code_block)?;
         code_block.add_store_column::<B>(0, &result_type, &res);
         Ok(())
     }
@@ -110,6 +111,7 @@ impl CodeGen for Expr {
         &self, schema: &SchemaContext, code_block: &mut CodeBlock,
     ) -> Result<String, TypeError> {
         let result_type = self.infer_type(schema)?;
+        println!("Result Type: {:?}", result_type);
         let error_mode = schema.error_mode() == ErrorMode::Ansi;
 
         let var = match self {
@@ -208,9 +210,9 @@ impl CodeGen for Expr {
                 code_block
                     .add_variable_decl(result_type.kernel_type(), &var)
                     .add_validity_check(&var, &[&format!("{}.valid", e_var)])
-                    .add_conditional(&var, |block| {
+                    .add_conditional(&format!("{}.valid", var), |block| {
                         block.add_code(&format!(
-                            "\t{}.value = ({})({}.value)\n",
+                            "\t{}.value = ({})({}.value);\n",
                             var,
                             to.c_type(),
                             e_var,

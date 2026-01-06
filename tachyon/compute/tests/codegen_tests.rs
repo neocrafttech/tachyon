@@ -268,14 +268,19 @@ fn test_codegen_binary_same_type_cast() {
     let _ = expr.to_nvrtc::<u64>(&schema, &mut code_block).expect("codegen");
     println!("Code:");
     println!("{}", code_block.code());
-    let expected = r#"Float64 var0 = input[0].load<TypeKind::Float64, uint64_t>(row_idx);
-       	Float32 var1;
-       	var1.valid = true;
-       	var1.value = (float)2.5f;
-       	Float64 var2 = math::mul<false>(ctx, var0, var1);
-       	Float64 var3 = input[1].load<TypeKind::Float64, uint64_t>(row_idx);
-       	Float64 var4 = math::add<false>(ctx, var2, var3);
-       	output[0].store<TypeKind::Float64, uint64_t>(row_idx, var4);"#;
+    let expected = r#"	Float64 var0 = input[0].load<TypeKind::Float64, uint64_t>(row_idx);
+	Float32 var1;
+	var1.valid = true;
+	var1.value = (float)2.5f;
+	Float64 var2;
+	var2.valid = var1.valid;
+	if (var2.valid) {
+	var2.value = (double)(var1.value);
+	}
+	Float64 var3 = math::mul<false>(ctx, var0, var2);
+	Float64 var4 = input[1].load<TypeKind::Float64, uint64_t>(row_idx);
+	Float64 var5 = math::add<false>(ctx, var3, var4);
+	output[0].store<TypeKind::Float64, uint64_t>(row_idx, var5);"#;
     assert_eq!(normalize_code(code_block.code()), normalize_code(expected))
 }
 
@@ -299,19 +304,29 @@ fn test_codegen_binary_different_type_cast() {
     let _ = expr.to_nvrtc::<u64>(&schema, &mut code_block).expect("codegen");
     println!("Code:");
     println!("{}", code_block.code());
-    let expected = r#" 	Float64 var0 = input[0].load<TypeKind::Float64, uint64_t>(row_idx);
-       	Float32 var1;
-       	var1.valid = true;
-       	var1.value = (float)2.5f;
-       	Float64 var2 = math::mul<false>(ctx, var0, var1);
-       	Int64 var3 = input[1].load<TypeKind::Int64, uint64_t>(row_idx);
-       	Float32 var4;
-       	var4.valid = var3.valid;
-       	if (var4) {
-       	var4.value = (float)(var3.value)
-       	}
-       	Float64 var5 = math::add<false>(ctx, var2, var4);
-       	output[0].store<TypeKind::Float64, uint64_t>(row_idx, var5);"#;
+    let expected = r#" Float64 var0 = input[0].load<TypeKind::Float64, uint64_t>(row_idx);
+	Float32 var1;
+	var1.valid = true;
+	var1.value = (float)2.5f;
+	Float64 var2;
+	var2.valid = var1.valid;
+	if (var2.valid) {
+	var2.value = (double)(var1.value);
+	}
+	Float64 var3 = math::mul<false>(ctx, var0, var2);
+	Int64 var4 = input[1].load<TypeKind::Int64, uint64_t>(row_idx);
+	Float32 var5;
+	var5.valid = var4.valid;
+	if (var5.valid) {
+	var5.value = (float)(var4.value);
+	}
+	Float64 var6;
+	var6.valid = var5.valid;
+	if (var6.valid) {
+	var6.value = (double)(var5.value);
+	}
+	Float64 var7 = math::add<false>(ctx, var3, var6);
+	output[0].store<TypeKind::Float64, uint64_t>(row_idx, var7);"#;
     assert_eq!(normalize_code(code_block.code()), normalize_code(expected))
 }
 
