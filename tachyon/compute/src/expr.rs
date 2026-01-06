@@ -265,6 +265,32 @@ impl Expr {
 
                             //Integer Promotion: Promote to the wider integer type. (e.g., I32 + I64 -> I64)
                             (lt_val, rt_val) if lt_val.is_integer() && rt_val.is_integer() => {
+                                if lt_val.is_signed() != rt_val.is_signed() {
+                                    let left_size = lt_val.native_size();
+                                    let right_size = rt_val.native_size();
+
+                                    // If the signed type is larger, it can hold the unsigned type's range
+                                    // e.g., I16 + U8 -> I16 (I16 range: -32768..32767, U8 range: 0..255)
+                                    if lt_val.is_signed() && left_size > right_size {
+                                        return Ok(*lt_val);
+                                    }
+                                    if rt_val.is_signed() && right_size > left_size {
+                                        return Ok(*rt_val);
+                                    }
+
+                                    // Otherwise, need to promote to next larger signed type
+                                    let max_size = left_size.max(right_size);
+                                    return match max_size {
+                                        1 => Ok(DataType::I16), // I8 + U8 → I16
+                                        2 => Ok(DataType::I32), // I16 + U16 → I32
+                                        4 => Ok(DataType::I64), // I32 + U32 → I64
+                                        _ => Err(TypeError::Unsupported(
+                                            "I64/U64 mixing not supported".into(),
+                                        )),
+                                    };
+                                }
+
+                                // Same signedness: promote to wider type
                                 if lt_val.native_size() > rt_val.native_size() {
                                     Ok(*lt_val) // e.g., I64 + I32 -> I64
                                 } else {
@@ -358,6 +384,64 @@ impl Expr {
                 let _ = expr.infer_type(schema)?;
                 Ok(*to)
             }
+        }
+    }
+
+    pub fn simplify(&self, schema: &SchemaContext) -> Result<Expr, TypeError> {
+        match self {
+            Expr::Unary { op, expr } => {
+                let simplified_expr = expr.simplify(schema)?;
+                Ok(Expr::Unary { op: *op, expr: Box::new(simplified_expr) })
+            }
+
+            Expr::Binary { op, left, right } => {
+                let left = left.simplify(schema)?;
+                let right = right.simplify(schema)?;
+
+                let lt = left.infer_type(schema)?;
+                let rt = right.infer_type(schema)?;
+
+                let target_type = self.infer_type(schema)?;
+
+                match op {
+                    Operator::Add | Operator::Sub | Operator::Mul | Operator::Div => {
+                        let new_left = if lt != target_type {
+                            Expr::Cast { expr: Box::new(left), to: target_type }
+                        } else {
+                            left
+                        };
+
+                        let new_right = if rt != target_type {
+                            Expr::Cast { expr: Box::new(right), to: target_type }
+                        } else {
+                            right
+                        };
+
+                        Ok(Expr::Binary {
+                            op: *op,
+                            left: Box::new(new_left),
+                            right: Box::new(new_right),
+                        })
+                    }
+                    _ => Ok(Expr::Binary { op: *op, left: Box::new(left), right: Box::new(right) }),
+                }
+            }
+
+            Expr::Nary { op, args } => {
+                let simplified_args: Result<Vec<_>, _> =
+                    args.iter().map(|arg| arg.simplify(schema).map(Box::new)).collect();
+                Ok(Expr::Nary { op: *op, args: simplified_args? })
+            }
+
+            Expr::Call { name, args } => {
+                let mut simplified_args = Vec::new();
+                for arg in args {
+                    simplified_args.push(arg.simplify(schema)?);
+                }
+                Ok(Expr::Call { name: name.clone(), args: simplified_args })
+            }
+
+            _ => Ok(self.clone()),
         }
     }
 }

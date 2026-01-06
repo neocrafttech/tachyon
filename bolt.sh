@@ -3,6 +3,7 @@ set -e
 
 setup_rust(){
     echo "[INFO] Installing build essential"
+    sudo apt-get update -y
     sudo apt-get install -y build-essential
 
     echo "[INFO] Checking Rust installation..."
@@ -28,6 +29,7 @@ setup_rust(){
     if ! cargo nextest --version >/dev/null 2>&1; then
         cargo install cargo-nextest
     fi
+    . "$HOME/.cargo/env"
     export PATH="$HOME/.cargo/bin:$PATH"
     cargo nextest --version
 }
