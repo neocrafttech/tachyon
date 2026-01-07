@@ -11,6 +11,8 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+use tracing::debug;
+
 use crate::ffi::cuda_error::{CudaError, CudaResult};
 
 #[derive(Debug, thiserror::Error)]
@@ -99,7 +101,7 @@ impl KernelCache {
                 .map_err(|e| CudaError::Other(format!("Failed to load kernel: {:?}", e)));
         }
 
-        println!("Compiling kernel: {}", kernel_name);
+        debug!("Compiling kernel: {}", kernel_name);
         let kernel_data = compile_fn()?;
 
         self.save(kernel_name, &kernel_data)

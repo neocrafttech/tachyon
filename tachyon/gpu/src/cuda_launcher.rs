@@ -10,6 +10,7 @@ use std::ptr;
 
 use indoc::formatdoc;
 use sha2::{Digest, Sha256};
+use tracing::debug;
 
 use crate::error::GpuResult;
 use crate::ffi::column::{Column, ColumnFFI};
@@ -53,7 +54,7 @@ fn build_or_load_kernel(
         get_or_compile_kernel(&cache_key, || build_kernel(kernel_name, kernel_source, device))?;
 
     cuda::create_context(device)?;
-    println!("Loading CUBIN module...");
+    debug!("Loading CUBIN module...");
 
     let mut module: *mut std::ffi::c_void = ptr::null_mut();
     cuda::module_load_data(&mut module, &cubin)?;
@@ -66,16 +67,16 @@ fn build_or_load_kernel(
 fn build_kernel(kernel_name: &str, kernel_source: &str, device: i32) -> CudaResult<Vec<u8>> {
     let mut prog: *mut std::ffi::c_void = ptr::null_mut();
     nvrtc_wrap::create_program(&mut prog, kernel_name, kernel_source)?;
-    println!("Compiling kernel to CUBIN (fat binary)...");
+    debug!("Compiling kernel to CUBIN (fat binary)...");
     let arch_flag = cuda::get_arch_flag(device)?;
 
     let kernel_dir = get_kernel_path("src/ffi/kernels");
     let include_dir = format!("-I{}", kernel_dir.display());
-    println!("Kernel directory: {}", include_dir);
+    debug!("Kernel directory: {}", include_dir);
     let options = [arch_flag.as_str(), "--std=c++20", &include_dir, "-I/usr/local/cuda/include"];
     let c_options: Vec<CString> = options.iter().map(|s| CString::new(*s).unwrap()).collect();
     nvrtc_wrap::compile_program(prog, &c_options)?;
-    println!("Getting CUBIN...");
+    debug!("Getting CUBIN...");
     let cubin = nvrtc_wrap::get_cubin(prog)?;
     nvrtc_wrap::destroy_program(prog)?;
     Ok(cubin)
@@ -96,7 +97,7 @@ async fn launch_kernel(
     ];
     let block_size = 256;
     let grid_size = size.div_ceil(block_size);
-    println!("Launching kernel with grid size {} and block size {}", grid_size, block_size);
+    debug!("Launching kernel with grid size {} and block size {}", grid_size, block_size);
 
     cuda::launch_kernel(kernel, grid_size as u32, block_size as u32, args.as_mut_ptr()).await?;
     cuda::synchronize()?;
@@ -109,7 +110,7 @@ pub async fn launch<B: Sized>(code: &str, input: &[Column], output: &[Column]) -
 
     let kernel_name = kernel_name(code);
     let kernel_source = compose_kernel_source(&kernel_name, code);
-    println!("{:#}", kernel_source);
+    debug!("{:#}", kernel_source);
     let kernel = build_or_load_kernel(&kernel_name, &kernel_source, device)?;
 
     let input_ffi: Vec<ColumnFFI<B>> = input.iter().map(|col| col.as_ffi_column()).collect();

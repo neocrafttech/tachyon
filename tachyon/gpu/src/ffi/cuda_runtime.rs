@@ -7,6 +7,8 @@
 use std::ffi::c_void;
 use std::ptr;
 
+use tracing::debug;
+
 use crate::ffi::cuda_error::{CUresult, CudaErrorType, CudaResult, CudaResultExt};
 
 #[repr(u32)]
@@ -89,7 +91,7 @@ pub mod cuda {
             cuDeviceGetAttribute(&mut minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, device)
         }
         .check_with_context("cuDeviceGetAttribute")?;
-        println!("Device compute capability: {}.{}", major, minor);
+        debug!("Device compute capability: {}.{}", major, minor);
         let arch_flag = format!("--gpu-architecture=sm_{}{}", major, minor);
         Ok(arch_flag)
     }

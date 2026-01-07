@@ -7,6 +7,8 @@
 
 use std::collections::HashMap;
 
+use tracing::debug;
+
 use crate::bit_vector::BitBlock;
 use crate::data_type::DataType;
 use crate::error::ErrorMode;
@@ -111,7 +113,7 @@ impl CodeGen for Expr {
         &self, schema: &SchemaContext, code_block: &mut CodeBlock,
     ) -> Result<String, TypeError> {
         let result_type = self.infer_type(schema)?;
-        println!("Result Type: {:?}", result_type);
+        debug!("Result Type: {:?}", result_type);
         let error_mode = schema.error_mode() == ErrorMode::Ansi;
 
         let var = match self {

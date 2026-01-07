@@ -9,6 +9,8 @@ use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ptr;
 
+use tracing::debug;
+
 use crate::ffi::cuda_error::CudaResult;
 use crate::ffi::cuda_runtime::{MemcpyKind, cuda_rt};
 use crate::ffi::memory::cuda_memory::CudaMemory;
@@ -95,7 +97,7 @@ impl CudaMemory for DeviceMemory {
 
 impl Drop for DeviceMemory {
     fn drop(&mut self) {
-        println!("Dropping DeviceMemory of type with size {}", self.len);
+        debug!("Dropping DeviceMemory of type with size {}", self.len);
         let _ = cuda_rt::cuda_free(self.device_ptr);
     }
 }
