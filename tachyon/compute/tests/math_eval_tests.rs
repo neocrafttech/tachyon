@@ -1,10 +1,12 @@
 use std::fmt::Debug;
+use std::sync::Once;
 
 use arrow::datatypes::{
     ArrowPrimitiveType, Float16Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type,
     Int64Type, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
 };
 use half::f16;
+use tracing_subscriber;
 
 pub trait ArrowMapper {
     type ArrowType: ArrowPrimitiveType;
@@ -16,6 +18,18 @@ macro_rules! arrow_mapper {
             type ArrowType = $arrow_type;
         }
     };
+}
+
+static TRACING: Once = Once::new();
+
+fn init_tracing() {
+    TRACING.call_once(|| {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_test_writer()
+            .try_init()
+            .ok();
+    });
 }
 
 arrow_mapper!(i8, Int8Type);
@@ -290,6 +304,7 @@ macro_rules! test_eval_binary_fn {
             use compute::evaluate::{Device, evaluate};
             use compute::expr::Expr;
             use compute::operator::Operator;
+            init_tracing();
             let size = random_num!($size_min, $size_max);
             let value_range1 = <$native_type1>::test_range();
             let value_range2 = <$native_type2>::test_range();
@@ -419,6 +434,7 @@ macro_rules! test_eval_binary_cmp_fn {
             use compute::evaluate::{Device, evaluate};
             use compute::expr::Expr;
             use compute::operator::Operator;
+            init_tracing();
             let size = random_num!($size_min, $size_max);
             let value_range = <$native_type>::test_range();
             let a_vec: Vec<$native_type> = random_vec!(size, $native_type, value_range.0, value_range.1);
@@ -1635,8 +1651,8 @@ async fn test_add_with_null() {
     let output = result[0].data_as_slice::<bf16>().unwrap();
     let bit_vec = result[0].null_bits_as_slice().unwrap();
     assert!(bit_vec.is_valid(0));
-    assert!(!bit_vec.is_valid(1));
-    assert!(!bit_vec.is_valid(2));
+    assert!(bit_vec.is_null(1));
+    assert!(bit_vec.is_null(2));
     assert!(bit_vec.is_valid(3));
     assert_eq!(output[0], bf16::from_f32(4.0));
     assert_eq!(output[3], bf16::from_f32(5.0));
@@ -1670,8 +1686,8 @@ async fn test_add_literal() {
     let output = result[0].data_as_slice::<bf16>().unwrap();
     let bit_vec = result[0].null_bits_as_slice().unwrap();
     assert!(bit_vec.is_valid(0));
-    assert!(!bit_vec.is_valid(1));
-    assert!(!bit_vec.is_valid(2));
+    assert!(bit_vec.is_null(1));
+    assert!(bit_vec.is_null(2));
     assert!(bit_vec.is_valid(3));
     assert_eq!(output[0], bf16::from_f32(-4.0));
     assert_eq!(output[3], bf16::from_f32(6.0));
@@ -1709,8 +1725,8 @@ async fn test_add_different_types() {
     let output = result[0].data_as_slice::<f32>().unwrap();
     let bit_vec = result[0].null_bits_as_slice().unwrap();
     assert!(bit_vec.is_valid(0));
-    assert!(!bit_vec.is_valid(1));
-    assert!(!bit_vec.is_valid(2));
+    assert!(bit_vec.is_null(1));
+    assert!(bit_vec.is_null(2));
     assert!(bit_vec.is_valid(3));
     assert_eq!(output[0], 2.0);
     assert_eq!(output[3], -3.0);
@@ -1740,4 +1756,219 @@ async fn test_add_u64_i64_should_error() {
     let right = Expr::Literal(Literal::I64(1));
     let expr = Expr::Binary { op: Operator::Add, left: Box::new(left), right: Box::new(right) };
     expr.infer_type(&schema).unwrap();
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_cmp_different_types() {
+    use compute::bit_vector::BitVector;
+    use compute::data_type::DataType;
+    use compute::error::ErrorMode;
+    use compute::evaluate::{Device, evaluate};
+    use compute::expr::Expr;
+    use compute::operator::Operator;
+    init_tracing();
+    let a_vec: Vec<i32> = vec![1, 2, 3, 4, 5];
+    let b_vec: Vec<i64> = vec![1, 5, 2, 4, 6];
+
+    let mut a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
+    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
+
+    a_bit_vec.set_null(4);
+    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::I32);
+    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::I64);
+
+    let expr = Expr::binary(Operator::Eq, Expr::col("a"), Expr::col("b"));
+
+    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
+    let result = result.unwrap();
+    assert!(result[0].data_as_slice::<bool>().is_some());
+    let output = result[0].data_as_slice::<bool>().unwrap();
+    let bit_vec = result[0].null_bits_as_slice().unwrap();
+    assert!(bit_vec.is_valid(0));
+    assert!(bit_vec.is_null(4));
+    assert_eq!(output[0], true);
+    assert_eq!(output[1], false);
+    assert_eq!(output[2], false);
+    assert_eq!(output[3], true);
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_cmp_nan_eq() {
+    use compute::bit_vector::BitVector;
+    use compute::data_type::DataType;
+    use compute::error::ErrorMode;
+    use compute::evaluate::{Device, evaluate};
+    use compute::expr::Expr;
+    use compute::operator::Operator;
+    init_tracing();
+    let a_vec: Vec<f32> =
+        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
+    let b_vec: Vec<f64> =
+        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
+
+    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
+    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
+
+    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
+    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
+
+    let expr = Expr::binary(Operator::Eq, Expr::col("a"), Expr::col("b"));
+
+    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
+    let result = result.unwrap();
+    assert!(result[0].data_as_slice::<bool>().is_some());
+    let output = result[0].data_as_slice::<bool>().unwrap();
+    assert_eq!(output, vec![false, false, true, true, false, false, false, true]); //Nan == Nan for Databases/Dataframe, different than language
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_cmp_nan_neq() {
+    use compute::bit_vector::BitVector;
+    use compute::data_type::DataType;
+    use compute::error::ErrorMode;
+    use compute::evaluate::{Device, evaluate};
+    use compute::expr::Expr;
+    use compute::operator::Operator;
+    init_tracing();
+    let a_vec: Vec<f32> =
+        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
+    let b_vec: Vec<f64> =
+        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
+
+    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
+    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
+
+    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
+    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
+
+    let expr = Expr::binary(Operator::NotEq, Expr::col("a"), Expr::col("b"));
+
+    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
+    let result = result.unwrap();
+    assert!(result[0].data_as_slice::<bool>().is_some());
+    let output = result[0].data_as_slice::<bool>().unwrap();
+    assert_eq!(output, vec![true, true, false, false, true, true, true, false]); //Nan == Nan for Databases/Dataframe, different than language
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_cmp_nan_lt() {
+    use compute::bit_vector::BitVector;
+    use compute::data_type::DataType;
+    use compute::error::ErrorMode;
+    use compute::evaluate::{Device, evaluate};
+    use compute::expr::Expr;
+    use compute::operator::Operator;
+    init_tracing();
+    let a_vec: Vec<f32> =
+        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
+    let b_vec: Vec<f64> =
+        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
+
+    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
+    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
+
+    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
+    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
+
+    let expr = Expr::binary(Operator::Lt, Expr::col("a"), Expr::col("b"));
+
+    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
+    let result = result.unwrap();
+    assert!(result[0].data_as_slice::<bool>().is_some());
+    let output = result[0].data_as_slice::<bool>().unwrap();
+    assert_eq!(output, vec![false, true, false, false, true, false, true, false]); //Nan < Nan for Databases/Dataframe, different than language
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_cmp_nan_lteq() {
+    use compute::bit_vector::BitVector;
+    use compute::data_type::DataType;
+    use compute::error::ErrorMode;
+    use compute::evaluate::{Device, evaluate};
+    use compute::expr::Expr;
+    use compute::operator::Operator;
+    init_tracing();
+    let a_vec: Vec<f32> =
+        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
+    let b_vec: Vec<f64> =
+        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
+
+    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
+    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
+
+    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
+    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
+
+    let expr = Expr::binary(Operator::LtEq, Expr::col("a"), Expr::col("b"));
+
+    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
+    let result = result.unwrap();
+    assert!(result[0].data_as_slice::<bool>().is_some());
+    let output = result[0].data_as_slice::<bool>().unwrap();
+    assert_eq!(output, vec![false, true, true, true, true, false, true, true]); // any_number <= Nan for Databases/Dataframe, different than language
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_cmp_nan_gt() {
+    use compute::bit_vector::BitVector;
+    use compute::data_type::DataType;
+    use compute::error::ErrorMode;
+    use compute::evaluate::{Device, evaluate};
+    use compute::expr::Expr;
+    use compute::operator::Operator;
+    init_tracing();
+    let a_vec: Vec<f32> =
+        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
+    let b_vec: Vec<f64> =
+        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
+
+    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
+    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
+
+    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
+    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
+
+    let expr = Expr::binary(Operator::Gt, Expr::col("a"), Expr::col("b"));
+
+    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
+    let result = result.unwrap();
+    assert!(result[0].data_as_slice::<bool>().is_some());
+    let output = result[0].data_as_slice::<bool>().unwrap();
+    assert_eq!(output, vec![true, false, false, false, false, true, false, false]); //Nan > Nan for Databases/Dataframe, different than language
+}
+
+#[cfg(feature = "gpu")]
+#[tokio::test]
+async fn test_cmp_nan_gteq() {
+    use compute::bit_vector::BitVector;
+    use compute::data_type::DataType;
+    use compute::error::ErrorMode;
+    use compute::evaluate::{Device, evaluate};
+    use compute::expr::Expr;
+    use compute::operator::Operator;
+    init_tracing();
+    let a_vec: Vec<f32> =
+        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
+    let b_vec: Vec<f64> =
+        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
+
+    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
+    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
+
+    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
+    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
+
+    let expr = Expr::binary(Operator::GtEq, Expr::col("a"), Expr::col("b"));
+
+    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
+    let result = result.unwrap();
+    assert!(result[0].data_as_slice::<bool>().is_some());
+    let output = result[0].data_as_slice::<bool>().unwrap();
+    assert_eq!(output, vec![true, false, true, true, false, true, false, true]); //Nan >= Nan for Databases/Dataframe, different than language
 }

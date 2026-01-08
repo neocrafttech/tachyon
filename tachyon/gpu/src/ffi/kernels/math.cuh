@@ -27,10 +27,10 @@ __device__ __forceinline__ T add(C *__restrict__ ctx, const T &a, const T &b) {
   T result;
   result.valid = a.valid & b.valid;
 
-  if (__builtin_expect(result.valid, 1)) {
+  if (result.valid) [[likely]] {
     if constexpr (ErrorMode && T::is_integral) {
       bool overflow = __check_add_overflow(a.value, b.value, &result.value);
-      if (__builtin_expect(overflow, 0)) {
+      if (overflow) [[unlikely]] {
         result.valid = false;
         ctx[0].error_code = KernelError::ADD_OVERFLOW;
 
@@ -60,10 +60,10 @@ __device__ __forceinline__ T sub(C *__restrict__ ctx, const T &a, const T &b) {
 
   result.valid = a.valid & b.valid;
 
-  if (__builtin_expect(result.valid, 1)) {
+  if (result.valid) [[likely]] {
     if constexpr (ErrorMode && T::is_integral) {
       bool overflow = __check_sub_overflow(a.value, b.value, &result.value);
-      if (__builtin_expect(overflow, 0)) {
+      if (overflow) [[unlikely]] {
         result.valid = false;
         ctx[0].error_code = KernelError::SUB_OVERFLOW;
 
@@ -140,14 +140,13 @@ __device__ __forceinline__ bool __check_mul_overflow(T a, T b, T *res) {
 template <bool ErrorMode, typename C, typename T>
 __device__ __forceinline__ T mul(C *__restrict__ ctx, const T &a, const T &b) {
   T result;
-
   result.valid = a.valid & b.valid;
 
-  if (__builtin_expect(result.valid, 1)) {
+  if (result.valid) [[likely]] {
     if constexpr (ErrorMode && T::is_integral) {
       bool overflow = __check_mul_overflow(a.value, b.value, &result.value);
 
-      if (__builtin_expect(overflow, 0)) {
+      if (overflow) [[unlikely]] {
         result.valid = false;
         ctx[0].error_code = KernelError::MUL_OVERFLOW;
 
@@ -163,21 +162,22 @@ __device__ __forceinline__ T mul(C *__restrict__ ctx, const T &a, const T &b) {
 template <bool ErrorMode, typename C, typename T>
 __device__ __forceinline__ T div(C *__restrict__ ctx, const T &a, const T &b) {
   T result;
-
   result.valid = a.valid & b.valid;
 
-  if (__builtin_expect(result.valid, 1)) {
-    if (__builtin_expect(b.value == b.zero(), 0) && !T::is_floating) {
-      result.valid = false;
-      ctx[0].error_code = KernelError::DIV_BY_ZERO;
-      return result;
+  if (result.valid) [[likely]] {
+    if constexpr (!T::is_floating) {
+      if (b.value == b.zero()) [[unlikely]] {
+        result.valid = false;
+        ctx[0].error_code = KernelError::DIV_BY_ZERO;
+        return result;
+      }
     }
 
     // Irrespective of error mode overflow is error for division, no wrapping
     // like other operations
     bool overflow = (a.value == a.min() && b.value == static_cast<T>(-1));
 
-    if (__builtin_expect(overflow, 0)) {
+    if (overflow) [[unlikely]] {
       result.valid = false;
       ctx[0].error_code = KernelError::DIV_OVERFLOW;
       return result;
@@ -189,85 +189,139 @@ __device__ __forceinline__ T div(C *__restrict__ ctx, const T &a, const T &b) {
   return result;
 }
 
-template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ Bool eq(C *__restrict__ _ctx, const T &a,
-                                   const T &b) {
+template <bool ErrorMode, typename C, typename T1, typename T2>
+__device__ __forceinline__ Bool eq(C *__restrict__ _ctx, const T1 &lhs,
+                                   const T2 &rhs) {
   Bool result;
+  result.valid = lhs.valid & rhs.valid;
 
-  result.valid = a.valid & b.valid;
-
-  if (__builtin_expect(result.valid, 1)) {
-    result.value = a.value == b.value;
+  if (result.valid) [[likely]] {
+    // Databases/dataframes behavior for Nan == Nan is different than pure
+    // programming languages
+    if constexpr (T1::is_floating && T2::is_floating) {
+      if (isnan(lhs.value) && isnan(rhs.value)) {
+        result.value = true;
+      } else {
+        result.value = lhs.value == rhs.value;
+      }
+    } else {
+      result.value = lhs.value == rhs.value;
+    }
   }
 
   return result;
 }
 
-template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ Bool neq(C *__restrict__ _ctx, const T &a,
-                                    const T &b) {
+template <bool ErrorMode, typename C, typename T1, typename T2>
+__device__ __forceinline__ Bool neq(C *__restrict__ _ctx, const T1 &lhs,
+                                    const T2 &rhs) {
   Bool result;
+  result.valid = lhs.valid & rhs.valid;
 
-  result.valid = a.valid & b.valid;
-
-  if (__builtin_expect(result.valid, 1)) {
-    result.value = a.value != b.value;
+  if (result.valid) [[likely]] {
+    // Databases/dataframes behavior for Nan != Nan is different than pure
+    // programming languages
+    if constexpr (T1::is_floating && T2::is_floating) {
+      if (isnan(lhs.value) && isnan(rhs.value)) {
+        result.value = false;
+      } else {
+        result.value = lhs.value != rhs.value;
+      }
+    } else {
+      result.value = lhs.value != rhs.value;
+    }
   }
 
   return result;
 }
 
-template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ Bool lt(C *__restrict__ _ctx, const T &a,
-                                   const T &b) {
+template <bool ErrorMode, typename C, typename T1, typename T2>
+__device__ __forceinline__ Bool lt(C *__restrict__ _ctx, const T1 &lhs,
+                                   const T2 &rhs) {
   Bool result;
+  result.valid = lhs.valid & rhs.valid;
 
-  result.valid = a.valid & b.valid;
-
-  if (__builtin_expect(result.valid, 1)) {
-    result.value = a.value < b.value;
+  if (result.valid) [[likely]] {
+    // Databases/dataframes behavior for valid_number < Nan is different than
+    // pure programming languages
+    if constexpr (T1::is_floating && T2::is_floating) {
+      if (!isnan(lhs) && isnan(rhs)) {
+        result.value = true;
+      } else {
+        result.value = lhs.value < rhs.value;
+      }
+    } else {
+      result.value = lhs.value < rhs.value;
+    }
   }
 
   return result;
 }
 
-template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ Bool lteq(C *__restrict__ _ctx, const T &a,
-                                     const T &b) {
+template <bool ErrorMode, typename C, typename T1, typename T2>
+__device__ __forceinline__ Bool lteq(C *__restrict__ _ctx, const T1 &lhs,
+                                     const T2 &rhs) {
   Bool result;
+  result.valid = lhs.valid & rhs.valid;
 
-  result.valid = a.valid & b.valid;
-
-  if (__builtin_expect(result.valid, 1)) {
-    result.value = a.value <= b.value;
+  if (result.valid) [[likely]] {
+    // Databases/dataframes behavior for valid_number <= Nan // is different
+    // than pure programming languages
+    if constexpr (T1::is_floating && T2::is_floating) {
+      if (isnan(rhs)) {
+        result.value = true;
+      } else {
+        result.value = lhs.value <= rhs.value;
+      }
+    } else {
+      result.value = lhs.value <= rhs.value;
+    }
   }
 
   return result;
 }
 
-template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ Bool gt(C *__restrict__ _ctx, const T &a,
-                                   const T &b) {
+template <bool ErrorMode, typename C, typename T1, typename T2>
+__device__ __forceinline__ Bool gt(C *__restrict__ _ctx, const T1 &lhs,
+                                   const T2 &rhs) {
   Bool result;
+  result.valid = lhs.valid & rhs.valid;
 
-  result.valid = a.valid & b.valid;
-
-  if (__builtin_expect(result.valid, 1)) {
-    result.value = a.value > b.value;
+  if (result.valid) [[likely]] {
+    // Databases/dataframes behavior for Nan > valid_number is different than
+    // pure programming languages
+    if constexpr (T1::is_floating && T2::is_floating) {
+      if (isnan(lhs) && !isnan(rhs)) {
+        result.value = true;
+      } else {
+        result.value = lhs.value > rhs.value;
+      }
+    } else {
+      result.value = lhs.value > rhs.value;
+    }
   }
 
   return result;
 }
 
-template <bool ErrorMode, typename C, typename T>
-__device__ __forceinline__ Bool gteq(C *__restrict__ _ctx, const T &a,
-                                     const T &b) {
+template <bool ErrorMode, typename C, typename T1, typename T2>
+__device__ __forceinline__ Bool gteq(C *__restrict__ _ctx, const T1 &lhs,
+                                     const T2 &rhs) {
   Bool result;
+  result.valid = lhs.valid & rhs.valid;
 
-  result.valid = a.valid & b.valid;
-
-  if (__builtin_expect(result.valid, 1)) {
-    result.value = a.value >= b.value;
+  if (result.valid) [[likely]] {
+    // Databases/dataframes behavior for Nan >= valid_number is different than
+    // pure programming languages
+    if constexpr (T1::is_floating && T2::is_floating) {
+      if (isnan(lhs)) {
+        result.value = true;
+      } else {
+        result.value = lhs.value >= rhs.value;
+      }
+    } else {
+      result.value = lhs.value >= rhs.value;
+    }
   }
 
   return result;
@@ -277,11 +331,10 @@ template <bool ErrorMode, typename C, typename T>
 __device__ __forceinline__ T bit_and(C *__restrict__ _ctx, const T &a,
                                      const T &b) {
   T result;
-
   result.valid = a.valid & b.valid;
 
-  if (__builtin_expect(result.valid, 1)) {
-    result.value = a.value a & b.value;
+  if (result.valid) [[likely]] {
+    result.value = a.value & b.value;
   }
 
   return result;
@@ -291,10 +344,9 @@ template <bool ErrorMode, typename C, typename T>
 __device__ __forceinline__ T bit_or(C *__restrict__ _ctx, const T &a,
                                     const T &b) {
   T result;
-
   result.valid = a.valid & b.valid;
 
-  if (__builtin_expect(result.valid, 1)) {
+  if (result.valid) [[likely]] {
     result.value = a.value | b.value;
   }
 
@@ -304,11 +356,10 @@ __device__ __forceinline__ T bit_or(C *__restrict__ _ctx, const T &a,
 template <bool ErrorMode, typename C, typename T>
 __device__ __forceinline__ T mod(C *__restrict__ ctx, const T &a, const T &b) {
   T result;
-
   result.valid = a.valid & b.valid;
 
-  if (__builtin_expect(result.valid, 1)) {
-    if (__builtin_expect(b.value == 0, 0)) {
+  if (result.valid) [[likely]] {
+    if (b.value == 0) [[unlikely]] {
       result.valid = false;
       ctx[0].error_code = KernelError::MOD_BY_ZERO;
       return result;
@@ -317,7 +368,7 @@ __device__ __forceinline__ T mod(C *__restrict__ ctx, const T &a, const T &b) {
     if constexpr (ErrorMode) {
       bool overflow = (a.value == a.min() && b.value == -1);
 
-      if (__builtin_expect(overflow, 0)) {
+      if (overflow) [[unlikely]] {
         result.valid = false;
         ctx[0].error_code = KernelError::MOD_OVERFLOW;
         return result;

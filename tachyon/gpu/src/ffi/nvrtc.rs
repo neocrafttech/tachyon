@@ -8,6 +8,8 @@
 use std::ffi::{CString, c_void};
 use std::ptr;
 
+use tracing::debug;
+
 use crate::ffi::cuda_error::{
     CUDA_SUCCESS, CudaResult, CudaResultExt, NvrtcResult, nvrtcGetErrorString,
 };
@@ -47,8 +49,8 @@ pub fn log_nvrtc(result: NvrtcResult, msg: &str, prog: *mut std::ffi::c_void) {
                 if nvrtcGetProgramLog(prog, log.as_mut_ptr() as *mut i8) == CUDA_SUCCESS as u16 {
                     let log_str = String::from_utf8_lossy(&log);
                     let error = format!("{}: {}", msg, err_str.to_string_lossy());
-                    println!("Error: {}", error);
-                    println!("Log:\n{}", log_str);
+                    debug!("Error: {}", error);
+                    debug!("Log:\n{}", log_str);
                 }
             }
         }

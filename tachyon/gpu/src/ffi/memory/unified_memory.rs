@@ -8,6 +8,8 @@ use std::ffi::c_void;
 use std::marker::PhantomData;
 use std::ptr;
 
+use tracing::debug;
+
 use crate::ffi::cuda_error::CudaResult;
 use crate::ffi::cuda_runtime::{CU_MEM_ATTACH_GLOBAL, cuda_rt};
 use crate::ffi::memory::cuda_memory::CudaMemory;
@@ -70,7 +72,7 @@ impl CudaMemory for UnifiedMemory {
 
 impl Drop for UnifiedMemory {
     fn drop(&mut self) {
-        eprintln!("Dropping ManagedMemory with size {} bytes", self.len);
+        debug!("Dropping ManagedMemory with size {} bytes", self.len);
         let _ = cuda_rt::cuda_free(self.ptr);
     }
 }

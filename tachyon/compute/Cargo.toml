@@ -15,6 +15,8 @@ tokio.workspace = true
 thiserror.workspace = true
 half.workspace = true
 sha2.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 gpu = { path = "../gpu" }
 
 [features]
@@ -24,3 +26,8 @@ gpu = []
 [dev-dependencies]
 rand.workspace = true
 arrow.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "evaluate_bench"
+harness = false
