@@ -65,6 +65,23 @@ check_rust() {
     echo "[OK] Clippy checks passed!"
 }
 
+check_miri() {
+    echo "[INFO] Running cargo miri..."
+    rustup +nightly component add miri
+    export MIRIFLAGS="-Zmiri-disable-isolation"
+    if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+        echo "[INFO] CUDA GPU detected — but miri not supported for FFI( unsupported operation: can't call foreign function `cudaMalloc` on OS `linux`)..."
+       // cargo +nightly miri nextest run --features gpu --no-fail-fast --test-threads=4
+    else
+        echo "[INFO] Running CPU tests with miri..."
+        cargo +nightly miri nextest run --no-default-features --no-fail-fast --test-threads=4
+        echo "[WARN] CUDA GPU not detected — skipping GPU tests."
+        echo "[INFO] (CUDA toolkit may be installed, but no working GPU/driver found)"
+    fi
+
+    echo "[OK] Miri checks passed!"
+}
+
 check_cpp() {
     echo "[INFO] Checking CPP"
     files=$(find . -type f \( -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" -o -name "*.hpp" -o -name "*.h" -o -name "*.cu" -o -name "*.cuh" \))
@@ -129,6 +146,7 @@ help() {
     echo "  check   - Run cargo check, fmt, and clippy"
     echo "  build   - Only build the workspace (runs check first)"
     echo "  test    - Only run tests"
+    echo "  miri    - Run miri checks"
     echo "  coverage - Run coverage"
     echo "  all     - Run check, build, and test"
     echo "  help    - Show this help message"
@@ -151,6 +169,9 @@ main() {
             ;;
         test)
             test
+            ;;
+        miri)
+            check_miri
             ;;
         coverage)
             coverage

@@ -63,41 +63,41 @@ template <TypeKind K> struct TypeTraits;
 
 DEFINE_TYPE(Bool, bool, sizeof(bool), false, false, false, true, false)
 DEFINE_TYPE(Int8, int8_t, sizeof(int8_t), true, false,
-            std::numeric_limits<int8_t>::min(),
-            std::numeric_limits<int8_t>::max(), 0)
+            cuda_utils::numeric_limits<int8_t>::min(),
+            cuda_utils::numeric_limits<int8_t>::max(), 0)
 DEFINE_TYPE(UInt8, uint8_t, sizeof(uint8_t), false, false,
-            std::numeric_limits<uint8_t>::min(),
-            std::numeric_limits<uint8_t>::max(), 0)
+            cuda_utils::numeric_limits<uint8_t>::min(),
+            cuda_utils::numeric_limits<uint8_t>::max(), 0)
 DEFINE_TYPE(Int16, int16_t, sizeof(int16_t), true, false,
-            std::numeric_limits<int16_t>::min(),
-            std::numeric_limits<int16_t>::max(), 0)
+            cuda_utils::numeric_limits<int16_t>::min(),
+            cuda_utils::numeric_limits<int16_t>::max(), 0)
 DEFINE_TYPE(UInt16, uint16_t, sizeof(uint16_t), false, false,
-            std::numeric_limits<uint16_t>::min(),
-            std::numeric_limits<uint16_t>::max(), 0)
+            cuda_utils::numeric_limits<uint16_t>::min(),
+            cuda_utils::numeric_limits<uint16_t>::max(), 0)
 DEFINE_TYPE(Int32, int32_t, sizeof(int32_t), true, false,
-            std::numeric_limits<int32_t>::min(),
-            std::numeric_limits<int32_t>::max(), 0)
+            cuda_utils::numeric_limits<int32_t>::min(),
+            cuda_utils::numeric_limits<int32_t>::max(), 0)
 DEFINE_TYPE(UInt32, uint32_t, sizeof(uint32_t), false, false,
-            std::numeric_limits<uint32_t>::min(),
-            std::numeric_limits<uint32_t>::max(), 0)
+            cuda_utils::numeric_limits<uint32_t>::min(),
+            cuda_utils::numeric_limits<uint32_t>::max(), 0)
 DEFINE_TYPE(Int64, int64_t, sizeof(int64_t), true, false,
-            std::numeric_limits<int64_t>::min(),
-            std::numeric_limits<int64_t>::max(), 0)
+            cuda_utils::numeric_limits<int64_t>::min(),
+            cuda_utils::numeric_limits<int64_t>::max(), 0)
 DEFINE_TYPE(UInt64, uint64_t, sizeof(uint64_t), false, false,
-            std::numeric_limits<uint64_t>::min(),
-            std::numeric_limits<uint64_t>::max(), 0)
+            cuda_utils::numeric_limits<uint64_t>::min(),
+            cuda_utils::numeric_limits<uint64_t>::max(), 0)
 DEFINE_TYPE(BFloat16, bfloat16, sizeof(bfloat16), true, true,
-            std::numeric_limits<bfloat16>::min(),
-            std::numeric_limits<bfloat16>::max(), 0.0)
+            cuda_utils::numeric_limits<bfloat16>::min(),
+            cuda_utils::numeric_limits<bfloat16>::max(), 0.0)
 DEFINE_TYPE(Float16, float16, sizeof(float16), true, true,
-            std::numeric_limits<float16>::min(),
-            std::numeric_limits<float16>::max(), 0.0)
+            cuda_utils::numeric_limits<float16>::min(),
+            cuda_utils::numeric_limits<float16>::max(), 0.0)
 DEFINE_TYPE(Float32, float, sizeof(float), true, true,
-            std::numeric_limits<float>::min(),
-            std::numeric_limits<float>::max(), 0.0)
+            cuda_utils::numeric_limits<float>::min(),
+            cuda_utils::numeric_limits<float>::max(), 0.0)
 DEFINE_TYPE(Float64, double, sizeof(double), true, true,
-            std::numeric_limits<double>::min(),
-            std::numeric_limits<double>::max(), 0.0)
+            cuda_utils::numeric_limits<double>::min(),
+            cuda_utils::numeric_limits<double>::max(), 0.0)
 
 #undef DEFINE_TYPE
 
