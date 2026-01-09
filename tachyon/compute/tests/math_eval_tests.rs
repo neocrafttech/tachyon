@@ -1,252 +1,8 @@
-use std::fmt::Debug;
-use std::sync::Once;
-
-use arrow::datatypes::{
-    ArrowPrimitiveType, Float16Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type,
-    Int64Type, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
-};
+mod test_utils;
+use compute::operator::Operator;
 use half::f16;
-use tracing_subscriber;
 
-pub trait ArrowMapper {
-    type ArrowType: ArrowPrimitiveType;
-}
-
-macro_rules! arrow_mapper {
-    ($t:ty, $arrow_type:ty) => {
-        impl ArrowMapper for $t {
-            type ArrowType = $arrow_type;
-        }
-    };
-}
-
-static TRACING: Once = Once::new();
-
-fn init_tracing() {
-    TRACING.call_once(|| {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            .with_test_writer()
-            .try_init()
-            .ok();
-    });
-}
-
-arrow_mapper!(i8, Int8Type);
-arrow_mapper!(i16, Int16Type);
-arrow_mapper!(i32, Int32Type);
-arrow_mapper!(i64, Int64Type);
-arrow_mapper!(u8, UInt8Type);
-arrow_mapper!(u16, UInt16Type);
-arrow_mapper!(u32, UInt32Type);
-arrow_mapper!(u64, UInt64Type);
-arrow_mapper!(f16, Float16Type);
-arrow_mapper!(f32, Float32Type);
-arrow_mapper!(f64, Float64Type);
-
-macro_rules! impl_numeric_cast {
-    ($target:ty, $($source:ty)*) => {
-        $(
-            impl CastTo<$target> for $source {
-                fn cast(self) -> $target {
-                    self as $target
-                }
-            }
-        )*
-    };
-}
-
-trait CastTo<T> {
-    fn cast(self) -> T;
-}
-
-impl_numeric_cast!(f64, u8 u16 u32 u64 usize i8 i16 i32 i64 isize f32 f64);
-impl_numeric_cast!(f32, u8 u16 u32 u64 usize i8 i16 i32 i64 isize f32);
-impl_numeric_cast!(u64, u8 u16 u32 u64 i8 i16 i32);
-impl_numeric_cast!(u32, u8 u16 u32 i8 i16);
-impl_numeric_cast!(u16, u8 u16 i8);
-impl_numeric_cast!(u8, u8);
-impl_numeric_cast!(i64, i8 i16 i32 i64 isize u8 u16 u32);
-impl_numeric_cast!(i32, i8 i16 i32 u8 u16);
-impl_numeric_cast!(i16, i8 i16 u8);
-impl_numeric_cast!(i8, i8);
-
-// Manual implementation for specialized types like f16
-impl CastTo<f64> for f16 {
-    fn cast(self) -> f64 {
-        f64::from(f32::from(self))
-    }
-}
-impl CastTo<f32> for f16 {
-    fn cast(self) -> f32 {
-        f32::from(self)
-    }
-}
-
-impl CastTo<f16> for f16 {
-    fn cast(self) -> f16 {
-        self
-    }
-}
-
-impl CastTo<f16> for u8 {
-    fn cast(self) -> f16 {
-        f16::from_f32(self as f32)
-    }
-}
-impl CastTo<f16> for u16 {
-    fn cast(self) -> f16 {
-        f16::from_f32(self as f32)
-    }
-}
-
-impl CastTo<f16> for u32 {
-    fn cast(self) -> f16 {
-        f16::from_f32(self as f32)
-    }
-}
-
-impl CastTo<f16> for u64 {
-    fn cast(self) -> f16 {
-        f16::from_f32(self as f32)
-    }
-}
-
-impl CastTo<f16> for i8 {
-    fn cast(self) -> f16 {
-        f16::from_f32(self as f32)
-    }
-}
-
-impl CastTo<f16> for i16 {
-    fn cast(self) -> f16 {
-        f16::from_f32(self as f32)
-    }
-}
-
-impl CastTo<f16> for i32 {
-    fn cast(self) -> f16 {
-        f16::from_f32(self as f32)
-    }
-}
-
-impl CastTo<f16> for i64 {
-    fn cast(self) -> f16 {
-        f16::from_f32(self as f32)
-    }
-}
-
-trait TypeTestRange: Sized + Copy + Debug {
-    fn test_range() -> (Self, Self);
-}
-macro_rules! impl_test_range {
-    ($($t:ty)*) => {
-        $(
-            impl TypeTestRange for $t {
-                fn test_range() -> (Self, Self) {
-                    (<$t>::MIN, <$t>::MAX)
-                }
-            }
-        )*
-    };
-}
-impl_test_range!(u8 u16 u32 u64 usize i8 i16 i32 i64 isize f16);
-
-impl TypeTestRange for f32 {
-    fn test_range() -> (Self, Self) {
-        (f32::MIN / 2.0, f32::MAX / 2.0)
-    }
-}
-
-impl TypeTestRange for f64 {
-    fn test_range() -> (Self, Self) {
-        (f64::MIN / 2.0, f64::MAX / 2.0)
-    }
-}
-
-#[macro_export]
-macro_rules! random_num {
-    ($min:expr, $max:expr) => {{
-        use rand;
-        use rand::Rng;
-        let mut rng = rand::rng();
-        let num: usize = rng.random_range($min..$max);
-        num
-    }};
-}
-
-#[macro_export]
-macro_rules! random_vec {
-    ($size:expr, $ty:ty, $min:expr, $max:expr) => {{
-        use rand::Rng;
-        let mut rng = rand::rng();
-        (0..$size).map(|_| rng.random_range($min..$max)).collect::<Vec<$ty>>()
-    }};
-}
-
-#[macro_export]
-macro_rules! random_bit_vec {
-    ($size:expr, $ty:ty) => {{
-        use compute::bit_vector::BitVector;
-        use rand;
-        use rand::Rng;
-        let mut rng = rand::rng();
-        const BITS: usize = std::mem::size_of::<$ty>() * 8;
-        let num_blocks = $size.div_ceil(BITS);
-        let mut bits: Vec<$ty> = Vec::with_capacity(num_blocks);
-
-        for _ in 0..(num_blocks.saturating_sub(1)) {
-            let random_block: $ty = rng.random_range(0..=<$ty>::MAX);
-            bits.push(random_block);
-        }
-
-        if num_blocks > 0 {
-            let last_idx = num_blocks - 1;
-            let total_used_bits = last_idx * BITS;
-            let valid_bits_in_last_block = $size - total_used_bits;
-            let last_block: $ty = rng.random_range(0..=<$ty>::MAX);
-
-            if valid_bits_in_last_block < BITS {
-                let low_bits_mask = !(<$ty>::MAX << valid_bits_in_last_block);
-                bits.push(last_block & low_bits_mask);
-            } else {
-                bits.push(last_block);
-            }
-        }
-
-        BitVector::new(bits, $size)
-    }};
-}
-
-#[macro_export]
-macro_rules! create_arrow_array {
-    ($vec:expr, $bit_vec:expr, $native_type:ty) => {{
-        let arrow_vec: Vec<Option<$native_type>> = $vec
-            .iter()
-            .enumerate()
-            .map(|(i, &x)| {
-                if $bit_vec.is_valid(i) {
-                    let y: $native_type = x.cast();
-                    Some(y)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        PrimitiveArray::<<$native_type as ArrowMapper>::ArrowType>::from(arrow_vec)
-    }};
-}
-
-#[macro_export]
-macro_rules! create_column {
-    ($vec:expr, $bit_vec:expr, $name:expr, $data_type:expr) => {{
-        use std::sync::Arc;
-
-        use compute::column::{Column, VecArray};
-        let arr = Arc::new(VecArray { data: $vec.clone(), datatype: $data_type });
-        Column::new($name, arr, $bit_vec)
-    }};
-}
+use crate::test_utils::{ArrowMapper, CastTo, TypeTestRange, init_tracing};
 
 macro_rules! test_eval_binary_matrix {
     (
@@ -368,6 +124,10 @@ macro_rules! test_eval_binary_fn {
                                     }
                                 }
                             };
+                            if actual.is_nan() && expected.is_nan() {
+                                //Treat it as equal
+                                continue;
+                            }
                             assert!(
                                 diff <= epsilon as f64,
                                 "Mismatch at index {}: expected {} op {} = {}, got {}, diff {}",
@@ -396,7 +156,7 @@ macro_rules! test_eval_binary_cmp_matrix {
         $size_max:expr,
         [
             $(
-                ( $test_name:ident, $native_type:ty, $data_type:expr)
+                ( $test_name:ident, $native_type1:ty, $data_type1:expr, $native_type2:ty, $data_type2:expr)
             ),* $(,)?
         ]
     ) => {
@@ -406,8 +166,10 @@ macro_rules! test_eval_binary_cmp_matrix {
                 $test_name,
                 $operator,
                 $error_mode,
-                $native_type,
-                $data_type,
+                $native_type1,
+                $data_type1,
+                $native_type2,
+                $data_type2,
                 $size_min,
                 $size_max,
             );
@@ -421,8 +183,10 @@ macro_rules! test_eval_binary_cmp_fn {
         $test_name:ident,
         $operator:expr,
         $error_mode:expr,
-        $native_type:ty,
-        $data_type:expr,
+        $native_type1:ty,
+        $data_type1:expr,
+        $native_type2:ty,
+        $data_type2:expr,
         $size_min:expr,
         $size_max:expr,
     ) => {
@@ -436,15 +200,16 @@ macro_rules! test_eval_binary_cmp_fn {
             use compute::operator::Operator;
             init_tracing();
             let size = random_num!($size_min, $size_max);
-            let value_range = <$native_type>::test_range();
-            let a_vec: Vec<$native_type> = random_vec!(size, $native_type, value_range.0, value_range.1);
-            let b_vec: Vec<$native_type> = random_vec!(size, $native_type, value_range.0, value_range.1);
+            let value_range1 = <$native_type1>::test_range();
+            let value_range2 = <$native_type2>::test_range();
+            let a_vec: Vec<$native_type1> = random_vec!(size, $native_type1, value_range1.0, value_range1.1);
+            let b_vec: Vec<$native_type2> = random_vec!(size, $native_type2, value_range2.0, value_range2.1);
 
             let a_bit_vec = random_bit_vec!(size, u32);
             let b_bit_vec = random_bit_vec!(size, u32);
 
-            let col_a = create_column!(a_vec, Some(a_bit_vec.clone()), "a", $data_type);
-            let col_b = create_column!(b_vec, Some(b_bit_vec.clone()), "b", $data_type);
+            let col_a = create_column!(a_vec, Some(a_bit_vec.clone()), "a", $data_type1);
+            let col_b = create_column!(b_vec, Some(b_bit_vec.clone()), "b", $data_type2);
 
             let expr = Expr::binary($operator, Expr::col("a"), Expr::col("b"));
 
@@ -458,14 +223,14 @@ macro_rules! test_eval_binary_cmp_fn {
                 if a_bit_vec.is_null(i) || b_bit_vec.is_null(i) {
                     assert!(bit_vec.is_null(i));
                 } else {
-                let actual = output[i];
-                let expected = &a_vec[i] $op &b_vec[i];
-                assert_eq!(
-                    actual, expected,
-                    "Mismatch at index {}: expected {} op {} = {}, got {}",
-                    i, &a_vec[i], &b_vec[i], expected, actual,
-                );
-            }
+                    let actual = output[i];
+                    let expected = &a_vec[i] $op &b_vec[i];
+                    assert_eq!(
+                        actual, expected,
+                        "Mismatch at index {}: expected {} op {} = {}, got {}",
+                        i, &a_vec[i], &b_vec[i], expected, actual,
+                    );
+                }
             }
         }
     };
@@ -1444,16 +1209,17 @@ test_eval_binary_cmp_matrix!(
     100,
     200_000,
     [
-        (test_eq_i8, i8, DataType::I8),
-        (test_eq_u8, u8, DataType::U8),
-        (test_eq_i16, i16, DataType::I16),
-        (test_eq_u16, u16, DataType::U16),
-        (test_eq_i32, i32, DataType::I32),
-        (test_eq_u32, u32, DataType::U32),
-        (test_eq_i64, i64, DataType::I64),
-        (test_eq_u64, u64, DataType::U64),
-        (test_eq_f32, f32, DataType::F32),
-        (test_eq_f64, f64, DataType::F64),
+        (test_eq_i8_i8, i8, DataType::I8, i8, DataType::I8),
+        (test_eq_u8_u8, u8, DataType::U8, u8, DataType::U8),
+        (test_eq_i16_i16, i16, DataType::I16, i16, DataType::I16),
+        (test_eq_u16_u16, u16, DataType::U16, u16, DataType::U16),
+        (test_eq_i32_i32, i32, DataType::I32, i32, DataType::I32),
+        (test_eq_u32_u32, u32, DataType::U32, u32, DataType::U32),
+        (test_eq_i64_i64, i64, DataType::I64, i64, DataType::I64),
+        (test_eq_u64_u64, u64, DataType::U64, u64, DataType::U64),
+        (test_eq_f16_f16, f16, DataType::F16, f16, DataType::F16),
+        (test_eq_f32_f32, f32, DataType::F32, f32, DataType::F32),
+        (test_eq_f64_f64, f64, DataType::F64, f64, DataType::F64),
     ]
 );
 
@@ -1464,16 +1230,17 @@ test_eval_binary_cmp_matrix!(
     100,
     400_000,
     [
-        (test_neq_i8, i8, DataType::I8),
-        (test_neq_u8, u8, DataType::U8),
-        (test_neq_i16, i16, DataType::I16),
-        (test_neq_u16, u16, DataType::U16),
-        (test_neq_i32, i32, DataType::I32),
-        (test_neq_u32, u32, DataType::U32),
-        (test_neq_i64, i64, DataType::I64),
-        (test_neq_u64, u64, DataType::U64),
-        (test_neq_f32, f32, DataType::F32),
-        (test_neq_f64, f64, DataType::F64),
+        (test_neq_i8_i8, i8, DataType::I8, i8, DataType::I8),
+        (test_neq_u8_u8, u8, DataType::U8, u8, DataType::U8),
+        (test_neq_i16_i16, i16, DataType::I16, i16, DataType::I16),
+        (test_neq_u16_u16, u16, DataType::U16, u16, DataType::U16),
+        (test_neq_i32_i32, i32, DataType::I32, i32, DataType::I32),
+        (test_neq_u32_u32, u32, DataType::U32, u32, DataType::U32),
+        (test_neq_i64_i64, i64, DataType::I64, i64, DataType::I64),
+        (test_neq_u64_u64, u64, DataType::U64, u64, DataType::U64),
+        (test_neq_f16_f16, f16, DataType::F16, f16, DataType::F16),
+        (test_neq_f32_f32, f32, DataType::F32, f32, DataType::F32),
+        (test_neq_f64_f64, f64, DataType::F64, f64, DataType::F64),
     ]
 );
 
@@ -1484,16 +1251,17 @@ test_eval_binary_cmp_matrix!(
     200,
     500_000,
     [
-        (test_gt_i8, i8, DataType::I8),
-        (test_gt_u8, u8, DataType::U8),
-        (test_gt_i16, i16, DataType::I16),
-        (test_gt_u16, u16, DataType::U16),
-        (test_gt_i32, i32, DataType::I32),
-        (test_gt_u32, u32, DataType::U32),
-        (test_gt_i64, i64, DataType::I64),
-        (test_gt_u64, u64, DataType::U64),
-        (test_gt_f32, f32, DataType::F32),
-        (test_gt_f64, f64, DataType::F64),
+        (test_gt_i8_i8, i8, DataType::I8, i8, DataType::I8),
+        (test_gt_u8_u8, u8, DataType::U8, u8, DataType::U8),
+        (test_gt_i16_i16, i16, DataType::I16, i16, DataType::I16),
+        (test_gt_u16_u16, u16, DataType::U16, u16, DataType::U16),
+        (test_gt_i32_i32, i32, DataType::I32, i32, DataType::I32),
+        (test_gt_u32_u32, u32, DataType::U32, u32, DataType::U32),
+        (test_gt_i64_i64, i64, DataType::I64, i64, DataType::I64),
+        (test_gt_u64_u64, u64, DataType::U64, u64, DataType::U64),
+        (test_gt_f16_f16, f16, DataType::F16, f16, DataType::F16),
+        (test_gt_f32_f32, f32, DataType::F32, f32, DataType::F32),
+        (test_gt_f64_f64, f64, DataType::F64, f64, DataType::F64),
     ]
 );
 
@@ -1504,16 +1272,17 @@ test_eval_binary_cmp_matrix!(
     128,
     512_000,
     [
-        (test_gteq_i8, i8, DataType::I8),
-        (test_gteq_u8, u8, DataType::U8),
-        (test_gteq_i16, i16, DataType::I16),
-        (test_gteq_u16, u16, DataType::U16),
-        (test_gteq_i32, i32, DataType::I32),
-        (test_gteq_u32, u32, DataType::U32),
-        (test_gteq_i64, i64, DataType::I64),
-        (test_gteq_u64, u64, DataType::U64),
-        (test_gteq_f32, f32, DataType::F32),
-        (test_gteq_f64, f64, DataType::F64),
+        (test_gteq_i8_i8, i8, DataType::I8, i8, DataType::I8),
+        (test_gteq_u8_u8, u8, DataType::U8, u8, DataType::U8),
+        (test_gteq_i16_i16, i16, DataType::I16, i16, DataType::I16),
+        (test_gteq_u16_u16, u16, DataType::U16, u16, DataType::U16),
+        (test_gteq_i32_i32, i32, DataType::I32, i32, DataType::I32),
+        (test_gteq_u32_u32, u32, DataType::U32, u32, DataType::U32),
+        (test_gteq_i64_i64, i64, DataType::I64, i64, DataType::I64),
+        (test_gteq_u64_u64, u64, DataType::U64, u64, DataType::U64),
+        (test_gteq_f16_f16, f16, DataType::F16, f16, DataType::F16),
+        (test_gteq_f32_f32, f32, DataType::F32, f32, DataType::F32),
+        (test_gteq_f64_f64, f64, DataType::F64, f64, DataType::F64),
     ]
 );
 
@@ -1524,16 +1293,17 @@ test_eval_binary_cmp_matrix!(
     10,
     100_000,
     [
-        (test_lt_i8, i8, DataType::I8),
-        (test_lt_u8, u8, DataType::U8),
-        (test_lt_i16, i16, DataType::I16),
-        (test_lt_u16, u16, DataType::U16),
-        (test_lt_i32, i32, DataType::I32),
-        (test_lt_u32, u32, DataType::U32),
-        (test_lt_i64, i64, DataType::I64),
-        (test_lt_u64, u64, DataType::U64),
-        (test_lt_f32, f32, DataType::F32),
-        (test_lt_f64, f64, DataType::F64),
+        (test_lt_i8_i8, i8, DataType::I8, i8, DataType::I8),
+        (test_lt_u8_u8, u8, DataType::U8, u8, DataType::U8),
+        (test_lt_i16_i16, i16, DataType::I16, i16, DataType::I16),
+        (test_lt_u16_u16, u16, DataType::U16, u16, DataType::U16),
+        (test_lt_i32_i32, i32, DataType::I32, i32, DataType::I32),
+        (test_lt_u32_u32, u32, DataType::U32, u32, DataType::U32),
+        (test_lt_i64_i64, i64, DataType::I64, i64, DataType::I64),
+        (test_lt_u64_u64, u64, DataType::U64, u64, DataType::U64),
+        (test_lt_f16_f16, f16, DataType::F16, f16, DataType::F16),
+        (test_lt_f32_f32, f32, DataType::F32, f32, DataType::F32),
+        (test_lt_f64_f64, f64, DataType::F64, f64, DataType::F64),
     ]
 );
 
@@ -1544,16 +1314,17 @@ test_eval_binary_cmp_matrix!(
     100,
     250_000,
     [
-        (test_lteq_i8, i8, DataType::I8),
-        (test_lteq_u8, u8, DataType::U8),
-        (test_lteq_i16, i16, DataType::I16),
-        (test_lteq_u16, u16, DataType::U16),
-        (test_lteq_i32, i32, DataType::I32),
-        (test_lteq_u32, u32, DataType::U32),
-        (test_lteq_i64, i64, DataType::I64),
-        (test_lteq_u64, u64, DataType::U64),
-        (test_lteq_f32, f32, DataType::F32),
-        (test_lteq_f64, f64, DataType::F64),
+        (test_lteq_i8_i8, i8, DataType::I8, i8, DataType::I8),
+        (test_lteq_u8_u8, u8, DataType::U8, u8, DataType::U8),
+        (test_lteq_i16_i16, i16, DataType::I16, i16, DataType::I16),
+        (test_lteq_u16_u16, u16, DataType::U16, u16, DataType::U16),
+        (test_lteq_i32_i32, i32, DataType::I32, i32, DataType::I32),
+        (test_lteq_u32_u32, u32, DataType::U32, u32, DataType::U32),
+        (test_lteq_i64_i64, i64, DataType::I64, i64, DataType::I64),
+        (test_lteq_u64_u64, u64, DataType::U64, u64, DataType::U64),
+        (test_lteq_f16_f16, f16, DataType::F16, f16, DataType::F16),
+        (test_lteq_f32_f32, f32, DataType::F32, f32, DataType::F32),
+        (test_lteq_f64_f64, f64, DataType::F64, f64, DataType::F64),
     ]
 );
 
@@ -1796,162 +1567,52 @@ async fn test_cmp_different_types() {
 #[cfg(feature = "gpu")]
 #[tokio::test]
 async fn test_cmp_nan_eq() {
-    use compute::bit_vector::BitVector;
-    use compute::data_type::DataType;
-    use compute::error::ErrorMode;
-    use compute::evaluate::{Device, evaluate};
-    use compute::expr::Expr;
-    use compute::operator::Operator;
-    init_tracing();
-    let a_vec: Vec<f32> =
-        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
-    let b_vec: Vec<f64> =
-        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
-
-    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
-    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
-
-    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
-    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
-
-    let expr = Expr::binary(Operator::Eq, Expr::col("a"), Expr::col("b"));
-
-    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
-    let result = result.unwrap();
-    assert!(result[0].data_as_slice::<bool>().is_some());
-    let output = result[0].data_as_slice::<bool>().unwrap();
+    let output = evaluate_cmp(Operator::Eq).await;
     assert_eq!(output, vec![false, false, true, true, false, false, false, true]); //Nan == Nan for Databases/Dataframe, different than language
 }
 
 #[cfg(feature = "gpu")]
 #[tokio::test]
 async fn test_cmp_nan_neq() {
-    use compute::bit_vector::BitVector;
-    use compute::data_type::DataType;
-    use compute::error::ErrorMode;
-    use compute::evaluate::{Device, evaluate};
-    use compute::expr::Expr;
-    use compute::operator::Operator;
-    init_tracing();
-    let a_vec: Vec<f32> =
-        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
-    let b_vec: Vec<f64> =
-        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
-
-    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
-    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
-
-    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
-    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
-
-    let expr = Expr::binary(Operator::NotEq, Expr::col("a"), Expr::col("b"));
-
-    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
-    let result = result.unwrap();
-    assert!(result[0].data_as_slice::<bool>().is_some());
-    let output = result[0].data_as_slice::<bool>().unwrap();
+    let output = evaluate_cmp(Operator::NotEq).await;
     assert_eq!(output, vec![true, true, false, false, true, true, true, false]); //Nan == Nan for Databases/Dataframe, different than language
 }
 
 #[cfg(feature = "gpu")]
 #[tokio::test]
 async fn test_cmp_nan_lt() {
-    use compute::bit_vector::BitVector;
-    use compute::data_type::DataType;
-    use compute::error::ErrorMode;
-    use compute::evaluate::{Device, evaluate};
-    use compute::expr::Expr;
-    use compute::operator::Operator;
-    init_tracing();
-    let a_vec: Vec<f32> =
-        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
-    let b_vec: Vec<f64> =
-        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
-
-    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
-    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
-
-    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
-    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
-
-    let expr = Expr::binary(Operator::Lt, Expr::col("a"), Expr::col("b"));
-
-    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
-    let result = result.unwrap();
-    assert!(result[0].data_as_slice::<bool>().is_some());
-    let output = result[0].data_as_slice::<bool>().unwrap();
+    let output = evaluate_cmp(Operator::Lt).await;
     assert_eq!(output, vec![false, true, false, false, true, false, true, false]); //Nan < Nan for Databases/Dataframe, different than language
 }
 
 #[cfg(feature = "gpu")]
 #[tokio::test]
 async fn test_cmp_nan_lteq() {
-    use compute::bit_vector::BitVector;
-    use compute::data_type::DataType;
-    use compute::error::ErrorMode;
-    use compute::evaluate::{Device, evaluate};
-    use compute::expr::Expr;
-    use compute::operator::Operator;
-    init_tracing();
-    let a_vec: Vec<f32> =
-        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
-    let b_vec: Vec<f64> =
-        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
-
-    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
-    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
-
-    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
-    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
-
-    let expr = Expr::binary(Operator::LtEq, Expr::col("a"), Expr::col("b"));
-
-    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
-    let result = result.unwrap();
-    assert!(result[0].data_as_slice::<bool>().is_some());
-    let output = result[0].data_as_slice::<bool>().unwrap();
+    let output = evaluate_cmp(Operator::LtEq).await;
     assert_eq!(output, vec![false, true, true, true, true, false, true, true]); // any_number <= Nan for Databases/Dataframe, different than language
 }
 
 #[cfg(feature = "gpu")]
 #[tokio::test]
 async fn test_cmp_nan_gt() {
-    use compute::bit_vector::BitVector;
-    use compute::data_type::DataType;
-    use compute::error::ErrorMode;
-    use compute::evaluate::{Device, evaluate};
-    use compute::expr::Expr;
-    use compute::operator::Operator;
-    init_tracing();
-    let a_vec: Vec<f32> =
-        vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
-    let b_vec: Vec<f64> =
-        vec![1.0, f64::NAN, 3.0, f64::NAN, 6.0, f64::INFINITY, f64::NAN, f64::INFINITY];
-
-    let a_bit_vec = BitVector::<u64>::new_all_valid(a_vec.len());
-    let b_bit_vec = BitVector::<u64>::new_all_valid(b_vec.len());
-
-    let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
-    let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
-
-    let expr = Expr::binary(Operator::Gt, Expr::col("a"), Expr::col("b"));
-
-    let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
-    let result = result.unwrap();
-    assert!(result[0].data_as_slice::<bool>().is_some());
-    let output = result[0].data_as_slice::<bool>().unwrap();
+    let output = evaluate_cmp(Operator::Gt).await;
     assert_eq!(output, vec![true, false, false, false, false, true, false, false]); //Nan > Nan for Databases/Dataframe, different than language
 }
 
 #[cfg(feature = "gpu")]
 #[tokio::test]
 async fn test_cmp_nan_gteq() {
+    let output = evaluate_cmp(Operator::GtEq).await;
+    assert_eq!(output, vec![true, false, true, true, false, true, false, true]); //Nan >= Nan for Databases/Dataframe, different than language
+}
+
+async fn evaluate_cmp(op: Operator) -> Vec<bool> {
     use compute::bit_vector::BitVector;
     use compute::data_type::DataType;
     use compute::error::ErrorMode;
     use compute::evaluate::{Device, evaluate};
     use compute::expr::Expr;
-    use compute::operator::Operator;
+
     init_tracing();
     let a_vec: Vec<f32> =
         vec![f32::NAN, 2.0, 3.0, f32::NAN, 5.0, f32::NAN, f32::NEG_INFINITY, f32::INFINITY];
@@ -1964,11 +1625,12 @@ async fn test_cmp_nan_gteq() {
     let col_a = create_column!(a_vec, Some(a_bit_vec), "a", DataType::F32);
     let col_b = create_column!(b_vec, Some(b_bit_vec), "b", DataType::F64);
 
-    let expr = Expr::binary(Operator::GtEq, Expr::col("a"), Expr::col("b"));
+    let expr = Expr::binary(op, Expr::col("a"), Expr::col("b"));
 
     let result = evaluate(Device::GPU, ErrorMode::Tachyon, &expr, &vec![col_a, col_b]).await;
     let result = result.unwrap();
     assert!(result[0].data_as_slice::<bool>().is_some());
     let output = result[0].data_as_slice::<bool>().unwrap();
-    assert_eq!(output, vec![true, false, true, true, false, true, false, true]); //Nan >= Nan for Databases/Dataframe, different than language
+
+    return output.to_vec();
 }

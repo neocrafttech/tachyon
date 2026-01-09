@@ -23,7 +23,7 @@ typedef unsigned long long uint64_t;
 typedef __nv_bfloat16 bfloat16;
 typedef __half float16;
 
-namespace std {
+namespace cuda_utils {
 
 template <typename T> class numeric_limits {
 public:
@@ -208,4 +208,16 @@ template <> struct is_signed<double> {
 template <typename T> struct is_unsigned {
   static const bool value = !is_signed<T>::value;
 };
-} // namespace std
+
+template <typename T> __device__ inline bool is_nan(const T v) {
+  return isnan(v);
+}
+
+template <> __device__ inline bool is_nan<float16>(const float16 value) {
+  return __hisnan(value);
+}
+
+template <> __device__ inline bool is_nan<bfloat16>(const bfloat16 value) {
+  return __hisnan(value);
+}
+} // namespace cuda_utils
