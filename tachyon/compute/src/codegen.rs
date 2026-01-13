@@ -205,19 +205,29 @@ impl CodeGen for Expr {
             }
             Expr::Cast { expr, to } => {
                 let e_var = expr.build_nvrtc_code::<B>(schema, code_block)?;
-                if to.kernel_type() == expr.infer_type(schema)?.kernel_type() {
+                let from = expr.infer_type(schema)?;
+                if *to == from {
                     return Ok(e_var);
                 }
                 let var = code_block.next_var();
+                let cast_fn = match (from, to) {
+                    //(DataType::I8, DataType::F16) => "__ushort2half_rn",
+                    (DataType::I16, DataType::F16) => "__short2half_rn",
+                    (DataType::I32, DataType::F16) => "__int2half_rn",
+                    (DataType::I64, DataType::F16) => "__ll2half_rn",
+                    //(DataType::U8, DataType::F16) => "__ushort2half_rn",
+                    (DataType::U16, DataType::F16) => "__ushort2half_rn",
+                    (DataType::U32, DataType::F16) => "__uint2half_rn",
+                    (DataType::U64, DataType::F16) => "__ull2half_rn",
+                    _ => &format!("({})", to.c_type()),
+                };
                 code_block
                     .add_variable_decl(result_type.kernel_type(), &var)
                     .add_validity_check(&var, &[&format!("{}.valid", e_var)])
                     .add_conditional(&format!("{}.valid", var), |block| {
                         block.add_code(&format!(
-                            "\t{}.value = ({})({}.value);\n",
-                            var,
-                            to.c_type(),
-                            e_var,
+                            "\t{}.value = {}({}.value);\n",
+                            var, cast_fn, e_var,
                         ));
                     });
                 var
