@@ -5,6 +5,7 @@ use arrow::datatypes::{
     ArrowPrimitiveType, Float16Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type,
     Int64Type, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
 };
+use compute::operator::Operator;
 use half::f16;
 use tracing_subscriber;
 
@@ -221,6 +222,7 @@ macro_rules! random_bit_vec {
 #[macro_export]
 macro_rules! create_arrow_array {
     ($vec:expr, $bit_vec:expr, $native_type:ty) => {{
+        use arrow::array::PrimitiveArray;
         let arrow_vec: Vec<Option<$native_type>> = $vec
             .iter()
             .enumerate()
@@ -246,4 +248,110 @@ macro_rules! create_column {
         let arr = Arc::new(VecArray { data: $vec.clone(), datatype: $data_type });
         Column::new($name, arr, $bit_vec)
     }};
+}
+
+use arrow::array::{Array, BooleanArray};
+use arrow::compute::cast;
+use arrow::compute::kernels::cmp;
+use arrow::datatypes::DataType;
+use arrow::error::{ArrowError, Result};
+
+pub fn compare_numeric_arrays(a: &dyn Array, b: &dyn Array, op: Operator) -> Result<BooleanArray> {
+    let target_type = get_common_numeric_type(a.data_type(), b.data_type())?;
+    println!("Target type: {:?}", target_type);
+    let a_cast = cast(a, &target_type)?;
+    let b_cast = cast(b, &target_type)?;
+
+    match op {
+        Operator::Eq => cmp::eq(&a_cast, &b_cast),
+        Operator::NotEq => cmp::neq(&a_cast, &b_cast),
+        Operator::Lt => cmp::lt(&a_cast, &b_cast),
+        Operator::LtEq => cmp::lt_eq(&a_cast, &b_cast),
+        Operator::Gt => cmp::gt(&a_cast, &b_cast),
+        Operator::GtEq => cmp::gt_eq(&a_cast, &b_cast),
+        _ => Err(ArrowError::NotYetImplemented(format!(
+            "Comparison operator {:?} not supported",
+            op
+        ))),
+    }
+}
+
+fn get_common_numeric_type(a: &DataType, b: &DataType) -> Result<DataType> {
+    use DataType::*;
+
+    match (a, b) {
+        // If either is float, prioritize float types
+        (Float64, _) | (_, Float64) => Ok(Float64),
+        (Float32, _) | (_, Float32) => Ok(Float32),
+        (Float16, _) | (_, Float16) => Ok(Float16),
+
+        (a_int, b_int) if is_integer(a_int) && is_integer(b_int) => {
+            get_widest_integer_type(a_int, b_int)
+        }
+
+        _ => Err(ArrowError::ComputeError(format!("Cannot compare types {:?} and {:?}", a, b))),
+    }
+}
+
+fn is_integer(dt: &DataType) -> bool {
+    matches!(
+        dt,
+        DataType::Int8
+            | DataType::Int16
+            | DataType::Int32
+            | DataType::Int64
+            | DataType::UInt8
+            | DataType::UInt16
+            | DataType::UInt32
+            | DataType::UInt64
+    )
+}
+
+fn get_widest_integer_type(a: &DataType, b: &DataType) -> Result<DataType> {
+    use DataType::*;
+
+    // Check if we're mixing signed and unsigned
+    let a_signed = is_signed_int(a);
+    let b_signed = is_signed_int(b);
+
+    // If mixing signed/unsigned, use Float64 to avoid comparison issues
+    if a_signed != b_signed {
+        return Ok(Float64);
+    }
+
+    // Get the bit width for each type
+    let a_bits = get_int_bit_width(a);
+    let b_bits = get_int_bit_width(b);
+
+    let max_bits = a_bits.max(b_bits);
+
+    if a_signed {
+        Ok(match max_bits {
+            8 => Int8,
+            16 => Int16,
+            32 => Int32,
+            _ => Int64,
+        })
+    } else {
+        Ok(match max_bits {
+            8 => UInt8,
+            16 => UInt16,
+            32 => UInt32,
+            _ => UInt64,
+        })
+    }
+}
+
+fn is_signed_int(dt: &DataType) -> bool {
+    matches!(dt, DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64)
+}
+
+fn get_int_bit_width(dt: &DataType) -> u32 {
+    match dt {
+        DataType::Int8 | DataType::UInt8 => 8,
+        DataType::Int16 | DataType::UInt16 => 16,
+        DataType::Int32 | DataType::UInt32 => 32,
+        DataType::Int64 | DataType::UInt64 => 64,
+        _ => 64,
+    }
 }

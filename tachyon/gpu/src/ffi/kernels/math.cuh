@@ -196,9 +196,24 @@ __device__ __forceinline__ Bool eq(C *__restrict__ _ctx, const T1 &lhs,
   result.valid = lhs.valid & rhs.valid;
 
   if (result.valid) [[likely]] {
-    // Databases/dataframes behavior for Nan == Nan is different than pure
-    // programming languages
-    if constexpr (T1::is_floating && T2::is_floating) {
+    if constexpr (cuda_utils::is_same<T1, Int64>::value &&
+                  cuda_utils::is_same<T2, UInt64>::value) {
+      if (lhs.value < 0) {
+        result.value = false;
+      } else {
+        result.value = static_cast<uint64_t>(lhs.value) == rhs.value;
+      }
+    } else if constexpr (cuda_utils::is_same<T1, UInt64>::value &&
+                         cuda_utils::is_same<T2, Int64>::value) {
+      if (rhs.value < 0) {
+        result.value = false;
+      } else {
+        result.value = lhs.value == static_cast<uint64_t>(rhs.value);
+      }
+    } else if constexpr (T1::is_floating && T2::is_floating) {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
+      // Databases/dataframes behavior for Nan == Nan is different than pure
+      // programming languages
       if (cuda_utils::is_nan(lhs.value) && cuda_utils::is_nan(rhs.value))
           [[unlikely]] {
         result.value = true;
@@ -206,6 +221,7 @@ __device__ __forceinline__ Bool eq(C *__restrict__ _ctx, const T1 &lhs,
         result.value = lhs.value == rhs.value;
       }
     } else {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
       result.value = lhs.value == rhs.value;
     }
   }
@@ -220,9 +236,24 @@ __device__ __forceinline__ Bool neq(C *__restrict__ _ctx, const T1 &lhs,
   result.valid = lhs.valid & rhs.valid;
 
   if (result.valid) [[likely]] {
-    // Databases/dataframes behavior for Nan != Nan is different than pure
-    // programming languages
-    if constexpr (T1::is_floating && T2::is_floating) {
+    if constexpr (cuda_utils::is_same<T1, Int64>::value &&
+                  cuda_utils::is_same<T2, UInt64>::value) {
+      if (lhs.value < 0) {
+        result.value = true;
+      } else {
+        result.value = static_cast<uint64_t>(lhs.value) != rhs.value;
+      }
+    } else if constexpr (cuda_utils::is_same<T1, UInt64>::value &&
+                         cuda_utils::is_same<T2, Int64>::value) {
+      if (rhs.value < 0) {
+        result.value = true;
+      } else {
+        result.value = lhs.value != static_cast<uint64_t>(rhs.value);
+      }
+    } else if constexpr (T1::is_floating && T2::is_floating) {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
+      // Databases/dataframes behavior for Nan != Nan is different than pure
+      // programming languages
       if (cuda_utils::is_nan(lhs.value) && cuda_utils::is_nan(rhs.value))
           [[unlikely]] {
         result.value = false;
@@ -230,6 +261,7 @@ __device__ __forceinline__ Bool neq(C *__restrict__ _ctx, const T1 &lhs,
         result.value = lhs.value != rhs.value;
       }
     } else {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
       result.value = lhs.value != rhs.value;
     }
   }
@@ -244,9 +276,24 @@ __device__ __forceinline__ Bool lt(C *__restrict__ _ctx, const T1 &lhs,
   result.valid = lhs.valid & rhs.valid;
 
   if (result.valid) [[likely]] {
-    // Databases/dataframes behavior for valid_number < Nan is different than
-    // pure programming languages
-    if constexpr (T1::is_floating && T2::is_floating) {
+    if constexpr (cuda_utils::is_same<T1, Int64>::value &&
+                  cuda_utils::is_same<T2, UInt64>::value) {
+      if (lhs.value < 0) {
+        result.value = true;
+      } else {
+        result.value = static_cast<uint64_t>(lhs.value) < rhs.value;
+      }
+    } else if constexpr (cuda_utils::is_same<T1, UInt64>::value &&
+                         cuda_utils::is_same<T2, Int64>::value) {
+      if (rhs.value < 0) {
+        result.value = false;
+      } else {
+        result.value = lhs.value < static_cast<uint64_t>(rhs.value);
+      }
+    } else if constexpr (T1::is_floating && T2::is_floating) {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
+      // Databases/dataframes behavior for valid_number < Nan is different than
+      // pure programming languages
       if (!cuda_utils::is_nan(lhs.value) && cuda_utils::is_nan(rhs.value))
           [[unlikely]] {
         result.value = true;
@@ -254,6 +301,7 @@ __device__ __forceinline__ Bool lt(C *__restrict__ _ctx, const T1 &lhs,
         result.value = lhs.value < rhs.value;
       }
     } else {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
       result.value = lhs.value < rhs.value;
     }
   }
@@ -268,15 +316,31 @@ __device__ __forceinline__ Bool lteq(C *__restrict__ _ctx, const T1 &lhs,
   result.valid = lhs.valid & rhs.valid;
 
   if (result.valid) [[likely]] {
-    // Databases/dataframes behavior for valid_number <= Nan // is different
-    // than pure programming languages
-    if constexpr (T1::is_floating && T2::is_floating) {
+    if constexpr (cuda_utils::is_same<T1, Int64>::value &&
+                  cuda_utils::is_same<T2, UInt64>::value) {
+      if (lhs.value < 0) {
+        result.value = true;
+      } else {
+        result.value = static_cast<uint64_t>(lhs.value) <= rhs.value;
+      }
+    } else if constexpr (cuda_utils::is_same<T1, UInt64>::value &&
+                         cuda_utils::is_same<T2, Int64>::value) {
+      if (rhs.value < 0) {
+        result.value = false;
+      } else {
+        result.value = lhs.value <= static_cast<uint64_t>(rhs.value);
+      }
+    } else if constexpr (T1::is_floating && T2::is_floating) {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
+      // Databases/dataframes behavior for valid_number <= Nan // is different
+      // than pure programming languages
       if (cuda_utils::is_nan(rhs.value)) [[unlikely]] {
         result.value = true;
       } else {
         result.value = lhs.value <= rhs.value;
       }
     } else {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
       result.value = lhs.value <= rhs.value;
     }
   }
@@ -291,9 +355,24 @@ __device__ __forceinline__ Bool gt(C *__restrict__ _ctx, const T1 &lhs,
   result.valid = lhs.valid & rhs.valid;
 
   if (result.valid) [[likely]] {
-    // Databases/dataframes behavior for Nan > valid_number is different than
-    // pure programming languages
-    if constexpr (T1::is_floating && T2::is_floating) {
+    if constexpr (cuda_utils::is_same<T1, Int64>::value &&
+                  cuda_utils::is_same<T2, UInt64>::value) {
+      if (lhs.value < 0) {
+        result.value = false;
+      } else {
+        result.value = static_cast<uint64_t>(lhs.value) > rhs.value;
+      }
+    } else if constexpr (cuda_utils::is_same<T1, UInt64>::value &&
+                         cuda_utils::is_same<T2, Int64>::value) {
+      if (rhs.value < 0) {
+        result.value = true;
+      } else {
+        result.value = lhs.value > static_cast<uint64_t>(rhs.value);
+      }
+    } else if constexpr (T1::is_floating && T2::is_floating) {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
+      // Databases/dataframes behavior for Nan > valid_number is different than
+      // pure programming languages
       if (cuda_utils::is_nan(lhs.value) && !cuda_utils::is_nan(rhs.value))
           [[unlikely]] {
         result.value = true;
@@ -301,6 +380,7 @@ __device__ __forceinline__ Bool gt(C *__restrict__ _ctx, const T1 &lhs,
         result.value = lhs.value > rhs.value;
       }
     } else {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
       result.value = lhs.value > rhs.value;
     }
   }
@@ -315,15 +395,31 @@ __device__ __forceinline__ Bool gteq(C *__restrict__ _ctx, const T1 &lhs,
   result.valid = lhs.valid & rhs.valid;
 
   if (result.valid) [[likely]] {
-    // Databases/dataframes behavior for Nan >= valid_number is different than
-    // pure programming languages
-    if constexpr (T1::is_floating && T2::is_floating) {
+    if constexpr (cuda_utils::is_same<T1, Int64>::value &&
+                  cuda_utils::is_same<T2, UInt64>::value) {
+      if (lhs.value < 0) {
+        result.value = false;
+      } else {
+        result.value = static_cast<uint64_t>(lhs.value) >= rhs.value;
+      }
+    } else if constexpr (cuda_utils::is_same<T1, UInt64>::value &&
+                         cuda_utils::is_same<T2, Int64>::value) {
+      if (rhs.value < 0) {
+        result.value = true;
+      } else {
+        result.value = lhs.value >= static_cast<uint64_t>(rhs.value);
+      }
+    } else if constexpr (T1::is_floating && T2::is_floating) {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
+      // Databases/dataframes behavior for Nan >= valid_number is different than
+      // pure programming languages
       if (cuda_utils::is_nan(lhs.value)) [[unlikely]] {
         result.value = true;
       } else {
         result.value = lhs.value >= rhs.value;
       }
     } else {
+      static_assert(cuda_utils::is_same<T1, T2>::value == true);
       result.value = lhs.value >= rhs.value;
     }
   }
