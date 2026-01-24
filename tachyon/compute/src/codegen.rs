@@ -232,6 +232,12 @@ impl CodeGen for Expr {
                     });
                 var
             }
+            Expr::Aggregate { op, .. } => {
+                return Err(TypeError::Unsupported(format!(
+                    "Aggregate {:?} is not supported in codegen yet",
+                    op
+                )));
+            }
         };
 
         Ok(var)

@@ -4,8 +4,9 @@
  * This source code is licensed under the Apache License, Version 2.0,
  * as found in the LICENSE file in the root directory of this source tree.
  */
-use std::ffi::c_void;
+use std::ffi::{CString, c_void};
 use std::ptr;
+use std::sync::{Mutex, OnceLock};
 
 use tracing::debug;
 
@@ -66,7 +67,15 @@ unsafe extern "C" {
 }
 
 pub mod cuda {
+    use std::collections::HashSet;
+
     use super::*;
+
+    fn initialized_context_devices() -> &'static Mutex<HashSet<i32>> {
+        static DEVICES: OnceLock<Mutex<HashSet<i32>>> = OnceLock::new();
+        DEVICES.get_or_init(|| Mutex::new(HashSet::new()))
+    }
+
     #[inline]
     pub fn init_cuda() -> CudaResult<()> {
         unsafe { cuInit(0) }.check_with_context("cuInit")
@@ -127,8 +136,19 @@ pub mod cuda {
 
     #[inline]
     pub fn create_context(device: i32) -> CudaResult<()> {
+        {
+            let devices = initialized_context_devices().lock().unwrap();
+            if devices.contains(&device) {
+                return Ok(());
+            }
+        }
+
         let mut context: *mut std::ffi::c_void = ptr::null_mut();
-        unsafe { cuCtxCreate_v2(&mut context, 0, device) }.check_with_context("cuCtxCreate_v2")
+        unsafe { cuCtxCreate_v2(&mut context, 0, device) }.check_with_context("cuCtxCreate_v2")?;
+
+        let mut devices = initialized_context_devices().lock().unwrap();
+        devices.insert(device);
+        Ok(())
     }
 
     #[inline]
@@ -141,14 +161,10 @@ pub mod cuda {
     pub fn module_get_function(
         function: &mut *mut c_void, module: *mut std::ffi::c_void, name: &str,
     ) -> CudaResult<()> {
-        unsafe {
-            cuModuleGetFunction(
-                function as *mut *mut c_void,
-                module,
-                name.as_ptr() as *const std::ffi::c_char,
-            )
-        }
-        .check_with_context("cuModuleGetFunction")
+        let c_name =
+            CString::new(name).expect("kernel function name must not contain interior NUL bytes");
+        unsafe { cuModuleGetFunction(function as *mut *mut c_void, module, c_name.as_ptr()) }
+            .check_with_context("cuModuleGetFunction")
     }
 
     #[inline]

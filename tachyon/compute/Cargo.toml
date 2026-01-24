@@ -31,3 +31,7 @@ criterion.workspace = true
 [[bench]]
 name = "evaluate_bench"
 harness = false
+
+[[bench]]
+name = "aggregate_bench"
+harness = false

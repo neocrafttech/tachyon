@@ -23,6 +23,12 @@ pub enum Operator {
     Not,
     Cast,
     Call,
+    // Aggregate Operators
+    Sum,
+    Count,
+    Avg,
+    Min,
+    Max,
 }
 
 impl Operator {
@@ -41,6 +47,14 @@ impl Operator {
                 | Operator::GtEq
                 | Operator::And
                 | Operator::Or
+        )
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn is_aggregate(&self) -> bool {
+        matches!(
+            self,
+            Operator::Sum | Operator::Count | Operator::Avg | Operator::Min | Operator::Max
         )
     }
 }
@@ -63,6 +77,11 @@ impl From<&str> for Operator {
             "neg" => Operator::Neg,
             "!" | "not" => Operator::Not,
             "cast" => Operator::Cast,
+            "sum" => Operator::Sum,
+            "count" => Operator::Count,
+            "avg" => Operator::Avg,
+            "min" => Operator::Min,
+            "max" => Operator::Max,
             _ => Operator::Call,
         }
     }
@@ -87,6 +106,11 @@ impl Operator {
             Operator::Not => "!",
             Operator::Cast => "cast",
             Operator::Call => "call",
+            Operator::Sum => "sum",
+            Operator::Count => "count",
+            Operator::Avg => "avg",
+            Operator::Min => "min",
+            Operator::Max => "max",
         }
     }
 }
