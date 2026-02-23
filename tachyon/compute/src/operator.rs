@@ -6,6 +6,7 @@
  */
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
+/// Operators supported by the expression AST.
 pub enum Operator {
     Add,
     Sub,
@@ -88,6 +89,7 @@ impl From<&str> for Operator {
 }
 
 impl Operator {
+    /// Returns the printable symbol/name for the operator.
     pub fn as_symbol(&self) -> &str {
         match self {
             Operator::Add => "+",

@@ -5,6 +5,7 @@
  * as found in the LICENSE file in the root directory of this source tree.
  */
 
+/// A bit block primitive used by [`BitVector`].
 pub trait BitBlock:
     Copy
     + Sized
@@ -26,7 +27,7 @@ pub trait BitBlock:
 
     const C_TYPE: &'static str;
 
-    /// Count the number of 1 bits
+    /// Counts the number of set bits.
     fn count_ones(self) -> u32;
 }
 
@@ -51,19 +52,23 @@ bit_block!(u32, "uint32_t");
 bit_block!(u64, "uint64_t");
 
 #[derive(Debug, Clone)]
+/// Compact bitmap used for null/valid tracking.
 pub struct BitVector<T: BitBlock> {
     bits: Vec<T>,
     num_bits: usize,
 }
 
 impl<T: BitBlock> BitVector<T> {
+    /// Creates a bitmap from raw blocks and an explicit logical bit length.
     pub fn new(bits: Vec<T>, num_bits: usize) -> Self {
         Self { bits, num_bits }
     }
+    /// Creates a bitmap with all entries initialized to null/invalid (`0`).
     pub fn new_all_null(num_bits: usize) -> Self {
         Self { bits: vec![T::ZERO; Self::num_blocks(num_bits)], num_bits }
     }
 
+    /// Creates a bitmap with all entries initialized to valid (`1`).
     pub fn new_all_valid(num_bits: usize) -> Self {
         let num_blocks = Self::num_blocks(num_bits);
         let mut bits = vec![T::MAX; num_blocks];
@@ -110,6 +115,7 @@ impl<T: BitBlock> BitVector<T> {
         self.bits[unit] &= !mask
     }
 
+    /// Returns `true` if the bit at `idx` is valid (`1`).
     pub fn is_valid(&self, idx: usize) -> bool {
         if idx >= self.num_bits {
             panic!("Index out of bounds: is_valid");
@@ -118,22 +124,27 @@ impl<T: BitBlock> BitVector<T> {
         (self.bits[unit] & mask) != T::ZERO
     }
 
+    /// Counts valid entries.
     pub fn count_valid(&self) -> usize {
         self.bits.iter().map(|&block| block.count_ones() as usize).sum()
     }
 
+    /// Counts null entries.
     pub fn count_null(&self) -> usize {
         self.num_bits - self.count_valid()
     }
 
+    /// Returns `true` if the bit at `idx` is null (`0`).
     pub fn is_null(&self, idx: usize) -> bool {
         !self.is_valid(idx)
     }
 
+    /// Returns the underlying block slice.
     pub fn as_slice(&self) -> &[T] {
         self.bits.as_slice()
     }
 
+    /// Returns the underlying block vector.
     pub fn as_vec(&self) -> &Vec<T> {
         &self.bits
     }

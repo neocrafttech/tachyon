@@ -7,6 +7,7 @@
 use half::{bf16, f16};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Logical value types supported by Tachyon expressions and columns.
 pub enum DataType {
     Bool,
     I8,
@@ -25,6 +26,7 @@ pub enum DataType {
 }
 
 impl DataType {
+    /// Returns the native Rust memory size for this type.
     pub fn native_size(&self) -> usize {
         match self {
             DataType::Bool => std::mem::size_of::<bool>(),
@@ -44,6 +46,7 @@ impl DataType {
         }
     }
 
+    /// Returns the C/CUDA type name used in generated kernels.
     pub fn c_type(&self) -> &'static str {
         match self {
             DataType::Bool => "bool",
@@ -63,6 +66,7 @@ impl DataType {
         }
     }
 
+    /// Returns the internal kernel type discriminator.
     pub fn kernel_type(&self) -> &'static str {
         match self {
             DataType::Bool => "Bool",
@@ -82,14 +86,17 @@ impl DataType {
         }
     }
 
+    /// Returns `true` for signed integer types.
     pub fn is_signed(&self) -> bool {
         matches!(self, DataType::I8 | DataType::I16 | DataType::I32 | DataType::I64)
     }
 
+    /// Returns `true` for unsigned integer types.
     pub fn is_unsigned(&self) -> bool {
         matches!(self, DataType::U8 | DataType::U16 | DataType::U32 | DataType::U64)
     }
 
+    /// Returns `true` for integer types.
     pub fn is_integer(&self) -> bool {
         matches!(
             self,
@@ -104,10 +111,12 @@ impl DataType {
         )
     }
 
+    /// Returns `true` for floating-point types.
     pub fn is_float(&self) -> bool {
         matches!(self, DataType::BF16 | DataType::F16 | DataType::F32 | DataType::F64)
     }
 
+    /// Returns `true` for all numeric types.
     pub fn is_numeric(&self) -> bool {
         matches!(
             self,
@@ -126,10 +135,12 @@ impl DataType {
         )
     }
 
+    /// Returns `true` for UTF-8 string values.
     pub fn is_string(&self) -> bool {
         matches!(self, DataType::Str)
     }
 
+    /// Returns `true` for boolean values.
     pub fn is_boolean(&self) -> bool {
         matches!(self, DataType::Bool)
     }
