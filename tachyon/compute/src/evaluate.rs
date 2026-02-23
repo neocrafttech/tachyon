@@ -7,8 +7,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 
-use gpu::cuda_launcher;
-use gpu::ffi::column as gpu_column;
+use gpu::column as gpu_column;
 
 use crate::bit_vector::BitBlock;
 use crate::codegen::{CodeBlock, CodeGen};
@@ -19,10 +18,17 @@ use crate::expr::{Expr, SchemaContext};
 use crate::operator::Operator;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Execution target for expression evaluation.
 pub enum Device {
+    /// Evaluate expressions on the GPU backend.
     GPU,
 }
 
+/// Evaluates an expression against a set of input columns.
+///
+/// Returns a vector of output columns. Row-wise expressions produce one output
+/// column with one value per input row. Aggregate expressions produce a single
+/// row output.
 pub async fn evaluate<B: BitBlock>(
     device: Device, error_mode: ErrorMode, expr: &Expr, columns: &[Column<B>],
 ) -> Result<Vec<Column<B>>, Box<dyn Error>> {
@@ -70,7 +76,7 @@ async fn evaluate_gpu_row<B: BitBlock>(
     )?;
     output_cols.push(gpu_col);
 
-    cuda_launcher::launch::<B>(code_block.code(), &input_cols, &output_cols).await?;
+    gpu::launch::<B>(code_block.code(), &input_cols, &output_cols).await?;
 
     let result_cols = output_cols
         .into_iter()
@@ -118,7 +124,7 @@ async fn evaluate_gpu_aggregate<B: BitBlock>(
     )?;
     output_cols.push(gpu_col);
 
-    cuda_launcher::launch_aggregate::<B>(&code, &input_cols, &output_cols).await?;
+    gpu::launch_aggregate::<B>(&code, &input_cols, &output_cols).await?;
 
     let result_cols = output_cols
         .into_iter()

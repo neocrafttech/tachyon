@@ -9,6 +9,7 @@ use thiserror::Error;
 
 use crate::ffi::cuda_error::CudaError;
 #[derive(Debug, Error)]
+/// Errors returned by the GPU execution layer.
 pub enum GpuError {
     #[error("CUDA error: {0}")]
     Cuda(#[from] CudaError),
@@ -16,4 +17,5 @@ pub enum GpuError {
     Math(String),
 }
 
+/// Result alias for GPU operations.
 pub type GpuResult<T> = Result<T, GpuError>;

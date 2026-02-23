@@ -80,7 +80,8 @@ fn compose_aggregate_kernel_source(kernel_name: &str, code: &str) -> String {
     kernel_source
 }
 
-pub fn kernel_name(code: &str) -> String {
+/// Computes a stable kernel symbol name from generated code.
+fn kernel_name(code: &str) -> String {
     scoped_kernel_name("kernel", code, EVAL_KERNEL_HEADERS_FINGERPRINT)
 }
 
@@ -169,6 +170,7 @@ async fn launch_aggregate_kernel(
     Ok(())
 }
 
+/// Builds/loads and launches a row-wise GPU kernel.
 pub async fn launch<B: Sized>(code: &str, input: &[Column], output: &[Column]) -> GpuResult<()> {
     cuda::init_cuda()?;
     let device = cuda::get_device(0)?;
@@ -204,6 +206,7 @@ pub async fn launch<B: Sized>(code: &str, input: &[Column], output: &[Column]) -
     Ok(())
 }
 
+/// Builds/loads and launches an aggregate GPU kernel.
 pub async fn launch_aggregate<B: Sized>(
     code: &str, input: &[Column], output: &[Column],
 ) -> GpuResult<()> {
@@ -244,6 +247,7 @@ pub async fn launch_aggregate<B: Sized>(
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
+/// Device context shared with kernels for error reporting.
 pub struct ContextFFI {
     pub error_code: u32,
 }

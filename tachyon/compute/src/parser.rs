@@ -10,6 +10,7 @@ use crate::expr::{Expr, Literal};
 use crate::operator::Operator;
 
 #[derive(Debug, thiserror::Error)]
+/// Parsing errors for scheme-style expression syntax.
 pub enum ParseError {
     #[error("unexpected end of input")]
     UnexpectedEof,
@@ -208,13 +209,15 @@ impl Lexer {
     }
 }
 
-pub struct Parser {
+/// Parses scheme-style expression strings into [`Expr`] trees.
+struct Parser {
     tokens: Vec<Token>,
     pos: usize,
 }
 
 impl Parser {
-    pub fn new(input: &str) -> Result<Self, ParseError> {
+    /// Creates a parser from input text.
+    fn new(input: &str) -> Result<Self, ParseError> {
         let mut lexer = Lexer::new(input);
         let mut tokens = Vec::new();
 
@@ -277,7 +280,7 @@ impl Parser {
         Err(ParseError::InvalidLiteral(s.to_string()))
     }
 
-    pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+    fn parse_expr(&mut self) -> Result<Expr, ParseError> {
         match self.peek() {
             Some(Token::OpenParen) => self.parse_call(),
             Some(Token::Ident(name)) => {
@@ -401,11 +404,13 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Expr, ParseError> {
+    /// Parses the full input expression.
+    fn parse(&mut self) -> Result<Expr, ParseError> {
         self.parse_expr()
     }
 }
 
+/// Convenience helper to parse a single scheme-style expression.
 pub fn parse_scheme_expr(input: &str) -> Result<Expr, ParseError> {
     let mut parser = Parser::new(input)?;
     parser.parse()

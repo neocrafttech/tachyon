@@ -15,6 +15,7 @@ use crate::error::ErrorMode;
 pub use crate::operator::Operator;
 
 #[derive(Debug, Clone, PartialEq)]
+/// Literal values representable in the expression AST.
 pub enum Literal {
     I8(i8),
     I16(i16),
@@ -33,6 +34,7 @@ pub enum Literal {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Expression tree used for planning, code generation, and evaluation.
 pub enum Expr {
     Column(String),
 
@@ -52,10 +54,12 @@ pub enum Expr {
 }
 
 impl Expr {
+    /// Creates a column reference expression.
     pub fn col<S: Into<String>>(name: S) -> Self {
         Expr::Column(name.into())
     }
 
+    /// Creates a literal expression.
     pub fn lit(l: Literal) -> Self {
         Expr::Literal(l)
     }
@@ -112,26 +116,32 @@ impl Expr {
         Expr::Literal(Literal::Bool(b))
     }
 
+    /// Creates a binary expression with `left <op> right`.
     pub fn binary(op: Operator, left: Expr, right: Expr) -> Self {
         Expr::Binary { op, left: Box::new(left), right: Box::new(right) }
     }
 
+    /// Creates a unary expression.
     pub fn unary(op: Operator, expr: Expr) -> Self {
         Expr::Unary { op, expr: Box::new(expr) }
     }
 
+    /// Creates a function call expression.
     pub fn call<N: Into<String>>(name: N, args: Vec<Expr>) -> Self {
         Expr::Call { name: name.into(), args }
     }
 
+    /// Casts this expression to a target [`DataType`].
     pub fn cast(self, to: DataType) -> Self {
         Expr::Cast { expr: Box::new(self), to }
     }
 
+    /// Creates an aggregate expression.
     pub fn aggregate(op: Operator, arg: Expr, distinct: bool) -> Self {
         Expr::Aggregate { op, arg: Box::new(arg), distinct }
     }
 
+    /// Returns direct children of this expression node.
     pub fn children(&self) -> Vec<&Expr> {
         match self {
             Expr::Column(_) | Expr::Literal(_) => vec![],
@@ -145,6 +155,7 @@ impl Expr {
     }
 }
 
+/// Visitor for traversing an [`Expr`] tree.
 pub trait ExprVisitor {
     fn enter(&mut self, _expr: &Expr) -> bool {
         true
@@ -153,6 +164,7 @@ pub trait ExprVisitor {
     fn exit(&mut self, _expr: &Expr) {}
 }
 
+/// Walks an expression tree in depth-first order.
 pub fn walk_expr<V: ExprVisitor + ?Sized>(expr: &Expr, visitor: &mut V) {
     if !visitor.enter(expr) {
         return;
@@ -164,6 +176,7 @@ pub fn walk_expr<V: ExprVisitor + ?Sized>(expr: &Expr, visitor: &mut V) {
 }
 
 #[derive(Debug, thiserror::Error)]
+/// Type inference and validation errors for expressions.
 pub enum TypeError {
     #[error("unknown column: {0}")]
     UnknownColumn(String),
@@ -176,36 +189,45 @@ pub enum TypeError {
 }
 
 #[derive(Debug, Clone)]
+/// Column/type bindings and evaluation options used by expression analysis.
 pub struct SchemaContext {
+    /// Known columns and their `(index, type)` mapping.
     pub columns: HashMap<String, (u16, DataType)>,
+    /// Error behavior used by generated code.
     pub error_mode: ErrorMode,
 }
 
 impl SchemaContext {
+    /// Creates an empty schema context.
     pub fn new() -> Self {
         Self { columns: Default::default(), error_mode: ErrorMode::Tachyon }
     }
 
+    /// Replaces known columns with `columns`.
     pub fn with_columns(mut self, columns: &HashMap<String, (u16, DataType)>) -> Self {
         self.columns = columns.clone();
         self
     }
 
+    /// Sets error mode for downstream planning/evaluation.
     pub fn with_error_mode(mut self, error_mode: ErrorMode) -> Self {
         self.error_mode = error_mode;
         self
     }
 
+    /// Adds a single named column and inferred index.
     pub fn with_column<S: Into<String>>(mut self, name: S, dt: DataType) -> Self {
         let size = self.columns.len();
         self.columns.insert(name.into(), (size.try_into().unwrap(), dt));
         self
     }
 
+    /// Looks up `(index, type)` metadata for a column name.
     pub fn lookup(&self, name: &str) -> Option<&(u16, DataType)> {
         self.columns.get(name)
     }
 
+    /// Returns the configured error mode.
     pub fn error_mode(&self) -> ErrorMode {
         self.error_mode
     }
@@ -218,6 +240,7 @@ impl Default for SchemaContext {
 }
 
 impl Expr {
+    /// Infers the output [`DataType`] for an expression under a given schema.
     pub fn infer_type(&self, schema: &SchemaContext) -> Result<DataType, TypeError> {
         match self {
             Expr::Column(name) => match schema.lookup(name) {

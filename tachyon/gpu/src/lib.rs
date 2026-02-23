@@ -1,3 +1,5 @@
+//! GPU runtime and CUDA FFI helpers for Tachyon compute execution.
+
 /*
  * Copyright (c) NeoCraft Technologies.
  *
@@ -5,7 +7,13 @@
  * as found in the LICENSE file in the root directory of this source tree.
  */
 
-pub mod cuda_launcher;
+/// Public GPU column facade.
+pub mod column;
+mod cuda_launcher;
+/// GPU-facing error types.
 pub mod error;
-pub mod ffi;
+/// Low-level CUDA and column FFI bindings.
+mod ffi;
 pub(crate) mod kernel_cache; //TODO Hide it
+
+pub use cuda_launcher::{launch, launch_aggregate};

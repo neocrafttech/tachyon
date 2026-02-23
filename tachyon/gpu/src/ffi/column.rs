@@ -68,7 +68,7 @@ impl Column {
         self.len() == 0
     }
 
-    pub fn as_ffi_column<B: Sized>(&self) -> ColumnFFI<B> {
+    pub(crate) fn as_ffi_column<B: Sized>(&self) -> ColumnFFI<B> {
         let data_ptr = self.data_memory.device_ptr();
 
         let validity_ptr =
@@ -100,7 +100,7 @@ impl Column {
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct ColumnFFI<B: Sized> {
+pub(crate) struct ColumnFFI<B: Sized> {
     pub data: *const std::os::raw::c_void,
     pub null_bits: *const B,
     pub size: usize,
