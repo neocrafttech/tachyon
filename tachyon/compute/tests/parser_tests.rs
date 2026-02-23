@@ -90,6 +90,35 @@ test_parser_matrix!(
     [(test_parse_sqrt, "(sqrt, i0)", "sqrt"), (test_parse_upper, "(upper, i0)", "upper"),]
 );
 
+macro_rules! test_parse_aggregate {
+    (
+        [
+            $(
+                ( $test_name:ident, $expr:expr, $op:expr )
+            ),* $(,)?
+        ]
+    ) => {
+        $(
+            #[test]
+            fn $test_name() {
+                let result = parse_scheme_expr($expr).unwrap();
+                match result {
+                    Expr::Aggregate { op, .. } => assert_eq!(op, $op),
+                    _ => panic!("Expected Aggregate expression, got {:?}", result),
+                }
+            }
+        )*
+    };
+}
+
+test_parse_aggregate!([
+    (test_parse_sum, "(sum, i0)", Operator::Sum),
+    (test_parse_count, "(count, i0)", Operator::Count),
+    (test_parse_avg, "(avg, i0)", Operator::Avg),
+    (test_parse_min, "(min, i0)", Operator::Min),
+    (test_parse_max, "(max, i0)", Operator::Max),
+]);
+
 #[test]
 fn test_nested() {
     let expr = parse_scheme_expr("(*, (+ , i0, 1), 2.5)").unwrap();

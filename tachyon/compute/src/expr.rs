@@ -12,7 +12,7 @@ use half::{bf16, f16};
 
 use crate::data_type::DataType;
 use crate::error::ErrorMode;
-use crate::operator::Operator;
+pub use crate::operator::Operator;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
@@ -47,6 +47,8 @@ pub enum Expr {
     Call { name: String, args: Vec<Expr> },
 
     Cast { expr: Box<Expr>, to: DataType },
+
+    Aggregate { op: Operator, arg: Box<Expr>, distinct: bool },
 }
 
 impl Expr {
@@ -126,6 +128,10 @@ impl Expr {
         Expr::Cast { expr: Box::new(self), to }
     }
 
+    pub fn aggregate(op: Operator, arg: Expr, distinct: bool) -> Self {
+        Expr::Aggregate { op, arg: Box::new(arg), distinct }
+    }
+
     pub fn children(&self) -> Vec<&Expr> {
         match self {
             Expr::Column(_) | Expr::Literal(_) => vec![],
@@ -134,6 +140,7 @@ impl Expr {
             Expr::Nary { args, .. } => args.iter().map(|x| x.as_ref()).collect(),
             Expr::Call { args, .. } => args.iter().collect(),
             Expr::Cast { expr, .. } => vec![expr.as_ref()],
+            Expr::Aggregate { arg, .. } => vec![arg.as_ref()],
         }
     }
 }
@@ -313,6 +320,31 @@ impl Expr {
                 let _ = expr.infer_type(schema)?;
                 Ok(*to)
             }
+
+            Expr::Aggregate { op, arg, .. } => {
+                let t = arg.infer_type(schema)?;
+                match op {
+                    Operator::Count => Ok(DataType::U64),
+                    Operator::Sum | Operator::Avg | Operator::Min | Operator::Max => match t {
+                        DataType::I8
+                        | DataType::I16
+                        | DataType::I32
+                        | DataType::I64
+                        | DataType::U8
+                        | DataType::U16
+                        | DataType::U32
+                        | DataType::U64
+                        | DataType::BF16
+                        | DataType::F16
+                        | DataType::F32
+                        | DataType::F64 => Ok(t),
+                        _ => Err(TypeError::Unsupported(format!("aggregate {:?} on {:?}", op, t))),
+                    },
+                    _ => {
+                        Err(TypeError::Unsupported(format!("not an aggregate operator: {:?}", op)))
+                    }
+                }
+            }
         }
     }
 
@@ -413,7 +445,17 @@ impl Expr {
                 Ok(Expr::Call { name: name.clone(), args: simplified_args })
             }
 
-            _ => Ok(self.clone()),
+            Expr::Cast { expr, to } => {
+                let simplified_expr = expr.simplify(schema)?;
+                Ok(Expr::Cast { expr: Box::new(simplified_expr), to: *to })
+            }
+
+            Expr::Aggregate { op, arg, distinct } => {
+                let simplified_arg = arg.simplify(schema)?;
+                Ok(Expr::Aggregate { op: *op, arg: Box::new(simplified_arg), distinct: *distinct })
+            }
+
+            Expr::Column(_) | Expr::Literal(_) => Ok(self.clone()),
         }
     }
 }
@@ -495,6 +537,13 @@ impl fmt::Display for Expr {
             Expr::Nary { op, args } => write!(f, "{}({:?})", op, args),
             Expr::Call { name, args } => write!(f, "{}({:?})", name, args),
             Expr::Cast { expr, to } => write!(f, "cast({} as {:?})", expr, to),
+            Expr::Aggregate { op, arg, distinct } => {
+                if *distinct {
+                    write!(f, "{}(DISTINCT {})", op, arg)
+                } else {
+                    write!(f, "{}({})", op, arg)
+                }
+            }
         }
     }
 }

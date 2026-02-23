@@ -375,7 +375,29 @@ impl Parser {
                 }
             }
 
-            _ => Ok(Expr::call(op, args)),
+            _ => {
+                let agg_op = match op.to_lowercase().as_str() {
+                    "sum" => Some(Operator::Sum),
+                    "count" => Some(Operator::Count),
+                    "avg" => Some(Operator::Avg),
+                    "min" => Some(Operator::Min),
+                    "max" => Some(Operator::Max),
+                    _ => None,
+                };
+
+                if let Some(op) = agg_op {
+                    if args.len() != 1 {
+                        return Err(ParseError::WrongArity {
+                            op: format!("{:?}", op),
+                            expected: 1,
+                            got: args.len(),
+                        });
+                    }
+                    Ok(Expr::Aggregate { op, arg: Box::new(args.remove(0)), distinct: false })
+                } else {
+                    Ok(Expr::call(op, args))
+                }
+            }
         }
     }
 
