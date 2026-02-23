@@ -14,9 +14,14 @@ struct Column {
   void *data;
   void *null_bits;
   size_t size;
+  void *string_buffer;
+  size_t string_buffer_size;
 
-  __host__ __device__ Column(void *data, size_t size, void *null_bits = nullptr)
-      : data(data), null_bits(null_bits), size(size) {
+  __host__ __device__ Column(void *data, size_t size, void *null_bits = nullptr,
+                             void *string_buffer = nullptr,
+                             size_t string_buffer_size = 0)
+      : data(data), null_bits(null_bits), size(size),
+        string_buffer(string_buffer), string_buffer_size(string_buffer_size) {
     ASSERT(data != nullptr, "Column data pointer must not be null");
     ASSERT(size > 0, "Column size must be greater than zero");
   }
@@ -49,8 +54,12 @@ struct Column {
       load_value.valid = false;
       return load_value;
     }
-    using NativeType = typename TypeTraits<K>::NativeType;
-    load_value.value = reinterpret_cast<const NativeType *>(data)[idx];
+    if constexpr (K == TypeKind::String) {
+      load_value.value = reinterpret_cast<const StringView *>(data)[idx];
+    } else {
+      using NativeType = typename TypeTraits<K>::NativeType;
+      load_value.value = reinterpret_cast<const NativeType *>(data)[idx];
+    }
     return load_value;
   }
 
@@ -60,8 +69,12 @@ struct Column {
     ASSERT(idx < size, "store(): index out of range");
     set_valid<B>(idx, store_value.valid);
     if (store_value.valid) {
-      using NativeType = typename TypeTraits<K>::NativeType;
-      reinterpret_cast<NativeType *>(data)[idx] = store_value.value;
+      if constexpr (K == TypeKind::String) {
+        reinterpret_cast<StringView *>(data)[idx] = store_value.value;
+      } else {
+        using NativeType = typename TypeTraits<K>::NativeType;
+        reinterpret_cast<NativeType *>(data)[idx] = store_value.value;
+      }
     }
   }
 };

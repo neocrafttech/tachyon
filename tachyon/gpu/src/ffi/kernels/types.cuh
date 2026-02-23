@@ -101,6 +101,53 @@ DEFINE_TYPE(Float64, double, sizeof(double), true, true,
 
 #undef DEFINE_TYPE
 
+struct StringView {
+  uint32_t size = 0;
+  uint32_t prefix = 0;
+  uint64_t data = 0;
+};
+
+static constexpr uint32_t STRING_INLINE_PREFIX_BYTES = 4;
+static constexpr uint32_t STRING_INLINE_DATA_BYTES = 8;
+static constexpr uint32_t STRING_INLINE_TOTAL_BYTES =
+    STRING_INLINE_PREFIX_BYTES + STRING_INLINE_DATA_BYTES;
+
+struct String {
+  using NativeType = StringView;
+  NativeType value{};
+  bool valid = true;
+
+  __host__ __device__ String() = default;
+  __host__ __device__ String(NativeType v) : value(v) {}
+
+  static constexpr TypeKind kind = TypeKind::String;
+  static constexpr uint8_t size = sizeof(StringView);
+  static constexpr bool is_signed = false;
+  static constexpr bool is_floating = false;
+  static constexpr bool is_integral = false;
+  __host__ __device__ static constexpr NativeType min() { return NativeType{}; }
+  __host__ __device__ static constexpr NativeType max() { return NativeType{}; }
+  __host__ __device__ static constexpr NativeType zero() {
+    return NativeType{};
+  }
+  __host__ __device__ operator NativeType() const { return value; }
+};
+
+template <> struct TypeTraits<TypeKind::String> {
+  using WrapperType = String;
+  using NativeType = StringView;
+  static constexpr TypeKind kind = TypeKind::String;
+  static constexpr uint8_t size = sizeof(StringView);
+  static constexpr bool is_signed = false;
+  static constexpr bool is_floating = false;
+  static constexpr unsigned int size_bytes = sizeof(StringView);
+  __host__ __device__ static constexpr NativeType min() { return NativeType{}; }
+  __host__ __device__ static constexpr NativeType max() { return NativeType{}; }
+  __host__ __device__ static constexpr NativeType zero() {
+    return NativeType{};
+  }
+};
+
 template <TypeKind K> struct KindToWrapper;
 #define DEFINE_KIND_MAPPING(ENUM_VAL)                                          \
   template <> struct KindToWrapper<TypeKind::ENUM_VAL> {                       \
@@ -120,6 +167,7 @@ DEFINE_KIND_MAPPING(BFloat16)
 DEFINE_KIND_MAPPING(Float16)
 DEFINE_KIND_MAPPING(Float32)
 DEFINE_KIND_MAPPING(Float64)
+DEFINE_KIND_MAPPING(String)
 
 #undef DEFINE_KIND_MAPPING
 
@@ -158,6 +206,7 @@ __constant__ const TypeDescriptor TYPE_DESCRIPTORS[] = {
     TypeDescriptor::from_type<TypeKind::Float16>(),
     TypeDescriptor::from_type<TypeKind::Float32>(),
     TypeDescriptor::from_type<TypeKind::Float64>(),
+    TypeDescriptor::from_type<TypeKind::String>(),
 };
 
 __host__ __device__ inline const TypeDescriptor &

@@ -59,6 +59,12 @@ async fn evaluate_gpu<B: BitBlock>(
 async fn evaluate_gpu_row<B: BitBlock>(
     expr: &Expr, schema_context: &SchemaContext, columns: &[Column<B>],
 ) -> Result<Vec<Column<B>>, Box<dyn Error>> {
+    if let Expr::Column(name) = expr {
+        if let Some((idx, DataType::Str)) = schema_context.lookup(name).copied() {
+            return Ok(vec![columns[idx as usize].clone()]);
+        }
+    }
+
     let mut code_block = CodeBlock::default();
     expr.to_nvrtc::<B>(schema_context, &mut code_block)?;
 
@@ -69,11 +75,20 @@ async fn evaluate_gpu_row<B: BitBlock>(
     let mut output_cols = Vec::<gpu_column::Column>::new();
     let result_type = expr.infer_type(schema_context)?;
 
-    let gpu_col = gpu_column::Column::new_uninitialized::<B>(
-        size * result_type.native_size(),
-        size.div_ceil(B::BITS),
-        size,
-    )?;
+    let gpu_col = if result_type == DataType::Str {
+        let row_capacity = estimate_string_row_capacity(expr, schema_context, columns)?;
+        gpu_column::Column::new_uninitialized_string::<B>(
+            size,
+            row_capacity * size,
+            size.div_ceil(B::BITS),
+        )?
+    } else {
+        gpu_column::Column::new_uninitialized::<B>(
+            size * result_type.native_size(),
+            size.div_ceil(B::BITS),
+            size,
+        )?
+    };
     output_cols.push(gpu_col);
 
     gpu::launch::<B>(code_block.code(), &input_cols, &output_cols).await?;
@@ -86,6 +101,60 @@ async fn evaluate_gpu_row<B: BitBlock>(
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(result_cols)
+}
+
+fn max_string_len_column<B: BitBlock>(col: &Column<B>) -> Result<usize, Box<dyn Error>> {
+    let values = col
+        .data_as_slice::<gpu_column::StringView>()
+        .ok_or("String expression requires encoded StringView columns")?;
+    Ok(values.iter().map(|sv| sv.size as usize).max().unwrap_or(0))
+}
+
+fn estimate_string_row_capacity<B: BitBlock>(
+    expr: &Expr, schema_context: &SchemaContext, columns: &[Column<B>],
+) -> Result<usize, Box<dyn Error>> {
+    match expr {
+        Expr::Column(name) => {
+            let (idx, dt) = schema_context
+                .lookup(name)
+                .copied()
+                .ok_or_else(|| format!("unknown column: {}", name))?;
+            if dt != DataType::Str {
+                return Err("Expected string column".into());
+            }
+            Ok(max_string_len_column(&columns[idx as usize])?)
+        }
+        Expr::Call { name, args } => match name.as_str() {
+            "lower" | "lower_case" | "upper" | "upper_case" => {
+                if args.len() != 1 {
+                    return Err(format!("{} expects 1 argument", name).into());
+                }
+                estimate_string_row_capacity(&args[0], schema_context, columns)
+            }
+            "substring" => {
+                if args.len() != 3 {
+                    return Err("substring expects 3 arguments".into());
+                }
+                let base_cap = estimate_string_row_capacity(&args[0], schema_context, columns)?;
+                let requested = match &args[2] {
+                    Expr::Literal(crate::expr::Literal::I32(v)) => (*v).max(0) as usize,
+                    Expr::Literal(crate::expr::Literal::I64(v)) => (*v).max(0) as usize,
+                    _ => base_cap,
+                };
+                Ok(base_cap.min(requested))
+            }
+            "concat" => {
+                if args.len() != 2 {
+                    return Err("concat expects 2 arguments".into());
+                }
+                let left = estimate_string_row_capacity(&args[0], schema_context, columns)?;
+                let right = estimate_string_row_capacity(&args[1], schema_context, columns)?;
+                Ok(left + right)
+            }
+            _ => Err(format!("Unsupported string function for output sizing: {}", name).into()),
+        },
+        _ => Err("Unable to infer string output buffer size for this expression".into()),
+    }
 }
 
 async fn evaluate_gpu_aggregate<B: BitBlock>(

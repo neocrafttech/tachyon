@@ -60,6 +60,8 @@ pub struct Column<B: BitBlock> {
     pub data_type: DataType,
     /// Type-erased values container.
     pub values: Arc<dyn Array>,
+    /// Backing buffer for encoded UTF-8 bytes when `data_type` is [`DataType::Str`].
+    pub string_buffer: Option<Arc<Vec<u8>>>,
     /// Null bitmap where `1` indicates valid and `0` indicates null.
     pub null_bits: Option<BitVector<B>>,
 }
@@ -88,7 +90,27 @@ impl<B: BitBlock> Column<B> {
     pub fn new<T: Array + 'static>(
         name: &str, values: Arc<T>, null_bits: Option<BitVector<B>>,
     ) -> Self {
-        Self { name: name.to_string(), data_type: values.data_type(), values, null_bits }
+        Self {
+            name: name.to_string(),
+            data_type: values.data_type(),
+            values,
+            string_buffer: None,
+            null_bits,
+        }
+    }
+
+    /// Creates a string column from pre-encoded string views and string buffer.
+    pub fn new_string(
+        name: &str, views: Arc<VecArray<gpu_column::StringView>>, string_buffer: Vec<u8>,
+        null_bits: Option<BitVector<B>>,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            data_type: DataType::Str,
+            values: views,
+            string_buffer: Some(Arc::new(string_buffer)),
+            null_bits,
+        }
     }
 
     /// Number of rows in the column.
@@ -129,7 +151,16 @@ impl<B: BitBlock> Column<B> {
             DataType::F32 => from_gpu_column!(name, f32, data_type, column),
             DataType::F64 => from_gpu_column!(name, f64, data_type, column),
             DataType::Bool => from_gpu_column!(name, bool, data_type, column),
-            _ => todo!(),
+            DataType::Str => {
+                let views = column.host_data::<gpu_column::StringView>()?;
+                let buffer = column.host_string_buffer()?.unwrap_or_default();
+                Self::new_string(
+                    name,
+                    Arc::new(VecArray { data: views, datatype: data_type }),
+                    buffer,
+                    column.host_bitmap()?.map(|bitmap| BitVector::new(bitmap, column.len())),
+                )
+            }
         };
         Ok(col)
     }
@@ -150,12 +181,149 @@ impl<B: BitBlock> Column<B> {
             DataType::F32 => to_gpu_column!(self, f32),
             DataType::F64 => to_gpu_column!(self, f64),
             DataType::Bool => to_gpu_column!(self, bool),
-            _ => Err(format!("Unsupported data type: {:?}", self.data_type).into()),
+            DataType::Str => {
+                let views = self
+                    .data_as_slice::<gpu_column::StringView>()
+                    .ok_or("Failed to cast to StringView")?;
+                let buffer = self
+                    .string_buffer
+                    .as_ref()
+                    .ok_or("String column requires a separate string buffer")?;
+                gpu_column::Column::new_string(
+                    views,
+                    buffer.as_slice(),
+                    self.null_bits.as_ref().map(|bits| bits.as_slice()),
+                )
+            }
         }
     }
 
     /// Returns the null bitmap if one is present.
     pub fn null_bits_as_slice(&self) -> Option<&BitVector<B>> {
         self.null_bits.as_ref()
+    }
+
+    /// Returns encoded UTF-8 buffer for string columns.
+    pub fn string_buffer_as_slice(&self) -> Option<&[u8]> {
+        self.string_buffer.as_ref().map(|b| b.as_slice())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpu::column::{
+        STRING_INLINE_DATA_BYTES, STRING_INLINE_PREFIX_BYTES, STRING_INLINE_TOTAL_BYTES,
+    };
+
+    use super::*;
+
+    fn pack_u32_prefix(bytes: &[u8]) -> u32 {
+        let mut prefix = 0u32;
+        let take = bytes.len().min(STRING_INLINE_PREFIX_BYTES);
+        for (i, b) in bytes.iter().take(take).enumerate() {
+            prefix |= (*b as u32) << (i * 8);
+        }
+        prefix
+    }
+
+    fn encode_string_view(
+        s: &str, buffer: &mut Vec<u8>,
+    ) -> Result<gpu_column::StringView, Box<dyn Error>> {
+        let bytes = s.as_bytes();
+        let size = u32::try_from(bytes.len()).map_err(|_| "String length exceeds u32")?;
+        let prefix = pack_u32_prefix(bytes);
+        if bytes.len() <= STRING_INLINE_TOTAL_BYTES {
+            let mut payload = 0u64;
+            for (i, b) in bytes
+                .iter()
+                .enumerate()
+                .skip(STRING_INLINE_PREFIX_BYTES)
+                .take(STRING_INLINE_DATA_BYTES)
+            {
+                payload |= (*b as u64) << ((i - STRING_INLINE_PREFIX_BYTES) * 8);
+            }
+            Ok(gpu_column::StringView { size, prefix, data: payload })
+        } else {
+            let offset =
+                u64::try_from(buffer.len()).map_err(|_| "String buffer offset overflow")?;
+            buffer.extend_from_slice(bytes);
+            Ok(gpu_column::StringView { size, prefix, data: offset })
+        }
+    }
+
+    fn decode_string_view(
+        view: gpu_column::StringView, buffer: &[u8],
+    ) -> Result<String, Box<dyn Error>> {
+        let len = view.size as usize;
+        if len <= STRING_INLINE_TOTAL_BYTES {
+            let mut tmp = [0u8; STRING_INLINE_TOTAL_BYTES];
+            for (i, out) in tmp.iter_mut().enumerate().take(STRING_INLINE_PREFIX_BYTES) {
+                *out = ((view.prefix >> (i * 8)) & 0xFF) as u8;
+            }
+            for i in 0..STRING_INLINE_DATA_BYTES {
+                tmp[STRING_INLINE_PREFIX_BYTES + i] = ((view.data >> (i * 8)) & 0xFF) as u8;
+            }
+            return Ok(std::str::from_utf8(&tmp[..len])?.to_string());
+        }
+
+        let offset = view.data as usize;
+        let end = offset.checked_add(len).ok_or("StringView offset overflow while decoding")?;
+        if end > buffer.len() {
+            return Err("StringView points outside string buffer".into());
+        }
+        Ok(std::str::from_utf8(&buffer[offset..end])?.to_string())
+    }
+
+    #[test]
+    fn test_string_view_inline_roundtrip() {
+        let mut buf = Vec::new();
+        let view = encode_string_view("hello", &mut buf).expect("encode");
+        assert!(buf.is_empty());
+        let out = decode_string_view(view, &buf).expect("decode");
+        assert_eq!(out, "hello");
+    }
+
+    #[test]
+    fn test_string_view_external_roundtrip() {
+        let mut buf = Vec::new();
+        let text = "this string is longer than twelve bytes";
+        let view = encode_string_view(text, &mut buf).expect("encode");
+        assert!(!buf.is_empty());
+        let out = decode_string_view(view, &buf).expect("decode");
+        assert_eq!(out, text);
+    }
+
+    #[test]
+    fn test_string_view_inline_roundtrip_german_utf8() {
+        let mut buf = Vec::new();
+        let text = "straße";
+        assert!(text.len() <= STRING_INLINE_TOTAL_BYTES);
+        let view = encode_string_view(text, &mut buf).expect("encode");
+        assert!(buf.is_empty());
+        let out = decode_string_view(view, &buf).expect("decode");
+        assert_eq!(out, text);
+    }
+
+    #[test]
+    fn test_string_view_external_roundtrip_hindi_utf8() {
+        let mut buf = Vec::new();
+        let text = "नमस्ते दुनिया";
+        assert!(text.len() > STRING_INLINE_TOTAL_BYTES);
+        let view = encode_string_view(text, &mut buf).expect("encode");
+        assert!(!buf.is_empty());
+        let out = decode_string_view(view, &buf).expect("decode");
+        assert_eq!(out, text);
+    }
+
+    #[test]
+    fn test_string_view_roundtrip_mixed_languages() {
+        let mut buf = Vec::new();
+        let texts = ["Grüße", "नमस्ते", "München में स्वागत"];
+
+        for text in texts {
+            let view = encode_string_view(text, &mut buf).expect("encode");
+            let out = decode_string_view(view, &buf).expect("decode");
+            assert_eq!(out, text);
+        }
     }
 }
