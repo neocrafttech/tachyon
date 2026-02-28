@@ -87,7 +87,13 @@ test_parser_matrix!(
 
 test_parser_matrix!(
     Call,
-    [(test_parse_sqrt, "(sqrt, i0)", "sqrt"), (test_parse_upper, "(upper, i0)", "upper"),]
+    [
+        (test_parse_sqrt, "(sqrt, i0)", "sqrt"),
+        (test_parse_upper, "(upper, i0)", "upper"),
+        (test_parse_length, "(length, s0)", "length"),
+        (test_parse_substring, "(substring, s0, 1, 3)", "substring"),
+        (test_parse_concat, "(concat, s0, s1)", "concat"),
+    ]
 );
 
 macro_rules! test_parse_aggregate {
@@ -140,4 +146,22 @@ fn test_function_call() {
 fn test_cast() {
     let expr = parse_scheme_expr("(cast, i0, f64)").unwrap();
     assert!(matches!(expr, Expr::Cast { .. }));
+}
+
+#[test]
+fn test_parse_unicode_string_literal() {
+    let expr = parse_scheme_expr("(upper, \"नमस्ते Grüße\")").unwrap();
+    match expr {
+        Expr::Call { name, args } => {
+            assert_eq!(name, "upper");
+            assert_eq!(args.len(), 1);
+            match &args[0] {
+                Expr::Literal(compute::expr::Literal::Str(s)) => {
+                    assert_eq!(s, "नमस्ते Grüße");
+                }
+                other => panic!("Expected string literal argument, got {:?}", other),
+            }
+        }
+        other => panic!("Expected call expression, got {:?}", other),
+    }
 }

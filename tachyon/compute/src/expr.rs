@@ -328,11 +328,70 @@ impl Expr {
                     if args.len() != 1 {
                         Err(TypeError::Unsupported("lower arity".into()))?;
                     }
+                    let t = args[0].infer_type(schema)?;
+                    if t != DataType::Str {
+                        Err(TypeError::Unsupported(format!("lower on {:?}", t)))?;
+                    }
+                    Ok(DataType::Str)
+                }
+                "lower_case" => {
+                    if args.len() != 1 {
+                        Err(TypeError::Unsupported("lower_case arity".into()))?;
+                    }
+                    let t = args[0].infer_type(schema)?;
+                    if t != DataType::Str {
+                        Err(TypeError::Unsupported(format!("lower_case on {:?}", t)))?;
+                    }
                     Ok(DataType::Str)
                 }
                 "upper" => {
                     if args.len() != 1 {
                         Err(TypeError::Unsupported("upper arity".into()))?;
+                    }
+                    let t = args[0].infer_type(schema)?;
+                    if t != DataType::Str {
+                        Err(TypeError::Unsupported(format!("upper on {:?}", t)))?;
+                    }
+                    Ok(DataType::Str)
+                }
+                "upper_case" => {
+                    if args.len() != 1 {
+                        Err(TypeError::Unsupported("upper_case arity".into()))?;
+                    }
+                    let t = args[0].infer_type(schema)?;
+                    if t != DataType::Str {
+                        Err(TypeError::Unsupported(format!("upper_case on {:?}", t)))?;
+                    }
+                    Ok(DataType::Str)
+                }
+                "length" => {
+                    if args.len() != 1 {
+                        Err(TypeError::Unsupported("length arity".into()))?;
+                    }
+                    let t = args[0].infer_type(schema)?;
+                    if t != DataType::Str {
+                        Err(TypeError::Unsupported(format!("length on {:?}", t)))?;
+                    }
+                    Ok(DataType::U32)
+                }
+                "substring" => {
+                    if args.len() != 3 {
+                        Err(TypeError::Unsupported("substring arity".into()))?;
+                    }
+                    let t = args[0].infer_type(schema)?;
+                    if t != DataType::Str {
+                        Err(TypeError::Unsupported(format!("substring on {:?}", t)))?;
+                    }
+                    Ok(DataType::Str)
+                }
+                "concat" => {
+                    if args.len() != 2 {
+                        Err(TypeError::Unsupported("concat arity".into()))?;
+                    }
+                    let lt = args[0].infer_type(schema)?;
+                    let rt = args[1].infer_type(schema)?;
+                    if lt != DataType::Str || rt != DataType::Str {
+                        Err(TypeError::Unsupported(format!("concat on {:?} and {:?}", lt, rt)))?;
                     }
                     Ok(DataType::Str)
                 }

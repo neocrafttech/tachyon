@@ -4,6 +4,7 @@
  * This source code is licensed under the Apache License, Version 2.0,
  * as found in the LICENSE file in the root directory of this source tree.
  */
+use gpu::column::StringView;
 use half::{bf16, f16};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,7 +43,7 @@ impl DataType {
             DataType::F16 => std::mem::size_of::<f16>(),
             DataType::F32 => std::mem::size_of::<f32>(),
             DataType::F64 => std::mem::size_of::<f64>(),
-            DataType::Str => std::mem::size_of::<u8>(),
+            DataType::Str => std::mem::size_of::<StringView>(),
         }
     }
 
@@ -62,7 +63,7 @@ impl DataType {
             DataType::F16 => "float16",
             DataType::F32 => "float",
             DataType::F64 => "double",
-            DataType::Str => "uint8_t",
+            DataType::Str => "StringView",
         }
     }
 

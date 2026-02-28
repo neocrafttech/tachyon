@@ -28,6 +28,7 @@ const EVAL_KERNEL_HEADERS_FINGERPRINT: &str = concat!(
     include_str!("ffi/kernels/math.cuh"),
     include_str!("ffi/kernels/limits.cuh"),
     include_str!("ffi/kernels/utils.cuh"),
+    include_str!("ffi/kernels/string_ops.cuh"),
     include_str!("ffi/kernels/bitVector.cuh"),
     include_str!("ffi/kernels/error.h"),
 );
@@ -52,6 +53,7 @@ fn compose_kernel_source(kernel_name: &str, code: &str) -> String {
         #include "column.cuh"
         #include "context.cuh"
         #include "math.cuh"
+        #include "string_ops.cuh"
         extern "C" __global__ void {kernel_name}(Context* ctx, Column* input, Column* output, size_t num_rows) {{
             size_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
             if (row_idx >= num_rows) return;

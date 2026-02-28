@@ -42,7 +42,7 @@ fn test_c_type_mapping() {
             DataType::F16 => assert_eq!(ctype, "float16"),
             DataType::F32 => assert_eq!(ctype, "float"),
             DataType::F64 => assert_eq!(ctype, "double"),
-            DataType::Str => assert_eq!(ctype, "uint8_t"),
+            DataType::Str => assert_eq!(ctype, "StringView"),
         }
     }
     matrix_test!(check_c_type);

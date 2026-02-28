@@ -5,4 +5,7 @@
  * as found in the LICENSE file in the root directory of this source tree.
  */
 
-pub use crate::ffi::column::Column;
+pub use crate::ffi::column::{
+    Column, STRING_INLINE_DATA_BYTES, STRING_INLINE_PREFIX_BYTES, STRING_INLINE_TOTAL_BYTES,
+    StringView,
+};
