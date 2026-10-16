@@ -7,6 +7,7 @@
 
 use std::error::Error;
 
+use crate::column::{BitmapElement, GpuElement};
 use crate::ffi::memory::gpu_memory::{GpuMemory, MemoryType};
 
 pub use crate::column::StringView;
@@ -19,10 +20,16 @@ pub struct Column {
 }
 
 impl Column {
+    /// Uploads supported values and an optional unsigned validity bitmap.
+    ///
+    /// ```compile_fail
+    /// use gpu::column::Column;
+    /// let _ = Column::new(&[String::from("owned")], None::<&[u64]>);
+    /// ```
     pub fn new<T, B>(data: &[T], null_bits: Option<&[B]>) -> Result<Self, Box<dyn Error>>
     where
-        T: Sized,
-        B: Sized,
+        T: GpuElement,
+        B: BitmapElement,
     {
         let memory_type = MemoryType::Device;
         let data_memory = memory_type
@@ -50,7 +57,7 @@ impl Column {
         views: &[StringView], string_buffer: &[u8], null_bits: Option<&[B]>,
     ) -> Result<Self, Box<dyn Error>>
     where
-        B: Sized,
+        B: BitmapElement,
     {
         let memory_type = MemoryType::Device;
         let data_memory = memory_type
@@ -76,7 +83,8 @@ impl Column {
         Ok(Column { data_memory, validity_memory, string_buffer_memory, num_rows: views.len() })
     }
 
-    pub fn new_uninitialized<B: Sized>(
+    /// Allocates output storage, zeroing values and validity bits so unwritten nulls are safe.
+    pub fn new_uninitialized<B: BitmapElement>(
         data_len: usize, null_bits_len: usize, num_rows: usize,
     ) -> Result<Self, Box<dyn Error>> {
         assert!(data_len > 0, "Cannot allocate zero-sized memory block.");
@@ -99,7 +107,8 @@ impl Column {
         Ok(Column { data_memory, validity_memory, string_buffer_memory: None, num_rows })
     }
 
-    pub fn new_uninitialized_string<B: Sized>(
+    /// Allocates zeroed string output storage, including descriptors and validity bits.
+    pub fn new_uninitialized_string<B: BitmapElement>(
         num_rows: usize, string_buffer_size: usize, null_bits_len: usize,
     ) -> Result<Self, Box<dyn Error>> {
         assert!(num_rows > 0, "Cannot allocate zero-row string column.");
@@ -155,13 +164,22 @@ impl Column {
         }
     }
 
-    pub fn host_data<T: Sized>(&self) -> Result<Vec<T>, Box<dyn Error>> {
+    /// Downloads supported values, rejecting invalid representations (including bool bytes).
+    /// The requested type may reinterpret the buffer, but every value is checked before use.
+    ///
+    /// ```compile_fail
+    /// use gpu::column::Column;
+    /// fn download_owned(column: &Column) {
+    ///     let _ = column.host_data::<String>();
+    /// }
+    /// ```
+    pub fn host_data<T: GpuElement>(&self) -> Result<Vec<T>, Box<dyn Error>> {
         self.data_memory
             .to_vec::<T>()
             .map_err(|e| format!("Failed to copy data from device: {}", e).into())
     }
 
-    pub fn host_bitmap<B: Sized>(&self) -> Result<Option<Vec<B>>, Box<dyn Error>> {
+    pub fn host_bitmap<B: BitmapElement>(&self) -> Result<Option<Vec<B>>, Box<dyn Error>> {
         self.validity_memory
             .as_ref()
             .map(|vm| {
@@ -190,4 +208,36 @@ pub(crate) struct ColumnFFI<B: Sized> {
     pub size: usize,
     pub string_buffer: *const u8,
     pub string_buffer_size: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_invalid_boolean_download() {
+        let column = Column::new(&[2u8], None::<&[u64]>).unwrap();
+        assert!(column.host_data::<bool>().is_err());
+        assert_eq!(column.host_data::<u8>().unwrap(), [2]);
+        assert!(column.host_data::<u16>().is_err());
+    }
+
+    #[test]
+    fn unwritten_output_has_valid_zero_values() {
+        let column = Column::new_uninitialized::<u64>(3, 1, 3).unwrap();
+        assert_eq!(column.host_data::<bool>().unwrap(), [false; 3]);
+        assert_eq!(column.host_bitmap::<u64>().unwrap().unwrap(), [0]);
+
+        let strings = Column::new_uninitialized_string::<u32>(2, 32, 1).unwrap();
+        assert_eq!(strings.host_data::<StringView>().unwrap(), [StringView::default(); 2]);
+        assert_eq!(strings.host_string_buffer().unwrap().unwrap(), [0; 32]);
+        assert_eq!(strings.host_bitmap::<u32>().unwrap().unwrap(), [0]);
+    }
+
+    #[test]
+    fn boolean_and_bitmap_roundtrip() {
+        let column = Column::new(&[false, true, false], Some(&[0b110u8][..])).unwrap();
+        assert_eq!(column.host_data::<bool>().unwrap(), [false, true, false]);
+        assert_eq!(column.host_bitmap::<u8>().unwrap().unwrap(), [0b110]);
+    }
 }

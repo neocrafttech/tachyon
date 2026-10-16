@@ -1,3 +1,6 @@
+// Shared helpers are used in different combinations by each integration test.
+#![allow(dead_code)]
+
 use std::fmt::Debug;
 use std::sync::Once;
 
@@ -7,7 +10,6 @@ use arrow::datatypes::{
 };
 use compute::operator::Operator;
 use half::f16;
-use tracing_subscriber;
 
 static TRACING: Once = Once::new();
 
@@ -168,8 +170,7 @@ impl TypeTestRange for f64 {
 #[macro_export]
 macro_rules! random_num {
     ($min:expr, $max:expr) => {{
-        use rand;
-        use rand::Rng;
+        use rand::{self, Rng};
         let mut rng = rand::rng();
         let num: usize = rng.random_range($min..$max);
         num
@@ -189,8 +190,7 @@ macro_rules! random_vec {
 macro_rules! random_bit_vec {
     ($size:expr, $ty:ty) => {{
         use compute::bit_vector::BitVector;
-        use rand;
-        use rand::Rng;
+        use rand::{self, Rng};
         let mut rng = rand::rng();
         const BITS: usize = std::mem::size_of::<$ty>() * 8;
         let num_blocks = $size.div_ceil(BITS);

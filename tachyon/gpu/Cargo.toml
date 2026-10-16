@@ -15,6 +15,8 @@ default = []
 gpu = []
 
 [dependencies]
+bytemuck = { version = "1.24.0", features = ["derive"] }
+half.workspace = true
 tokio.workspace = true
 sha2.workspace = true
 thiserror.workspace = true

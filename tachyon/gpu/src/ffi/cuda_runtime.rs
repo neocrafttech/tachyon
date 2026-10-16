@@ -59,6 +59,8 @@ unsafe extern "C" {
 
     pub fn cudaFree(devPtr: *mut c_void) -> CudaErrorType;
 
+    pub fn cudaMemset(devPtr: *mut c_void, value: i32, count: usize) -> CudaErrorType;
+
     pub fn cudaMemcpy(
         dst: *mut c_void, src: *const c_void, count: usize, kind: MemcpyKind,
     ) -> CudaErrorType;
@@ -178,6 +180,11 @@ pub mod cuda_rt {
     #[inline]
     pub fn cuda_malloc(dev_ptr: *mut *mut c_void, size: usize) -> CudaResult<()> {
         unsafe { cudaMalloc(dev_ptr, size) }.check_with_context("cudaMalloc")
+    }
+
+    #[inline]
+    pub fn cuda_memset(dev_ptr: *mut c_void, value: i32, count: usize) -> CudaResult<()> {
+        unsafe { cudaMemset(dev_ptr, value, count) }.check_with_context("cudaMemset")
     }
 
     #[inline]

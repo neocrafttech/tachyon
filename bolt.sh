@@ -17,15 +17,15 @@ setup_rust(){
         local CURRENT_VERSION
         CURRENT_VERSION=$(rustc --version | awk '{print $2}')
         echo "[INFO] Found Rust version $CURRENT_VERSION"
-        if [ "$CURRENT_VERSION" != "1.92.0" ]; then
-            echo "[INFO] Updating Rust to 1.92.0..."
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.92.0
+        if [ "$CURRENT_VERSION" != "1.99.1" ]; then
+            echo "[INFO] Updating Rust to 1.99.1..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.99.1
         else
-            echo "[OK] Rust is already 1.92.0"
+            echo "[OK] Rust is already 1.99.1"
         fi
     else
-        echo "[INFO] Rust or Cargo not found. Installing Rust 1.92.0 and Cargo..."
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.92.0
+        echo "[INFO] Rust or Cargo not found. Installing Rust 1.99.1 and Cargo..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.99.1
     fi
     if [ -f "$cargo_home/env" ]; then
         source "$cargo_home/env"
