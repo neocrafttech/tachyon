@@ -5,11 +5,13 @@
  * as found in the LICENSE file in the root directory of this source tree.
  */
 
+#[cfg(any(feature = "gpu", test))]
 use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Arc;
 
 use gpu::column as gpu_column;
+#[cfg(feature = "gpu")]
 use half::{bf16, f16};
 
 use crate::bit_vector::{BitBlock, BitVector};
@@ -66,6 +68,7 @@ pub struct Column<B: BitBlock> {
     pub null_bits: Option<BitVector<B>>,
 }
 
+#[cfg(feature = "gpu")]
 macro_rules! from_gpu_column {
     ($name:expr, $type:ty, $data_type:expr, $column:expr) => {
         Self::new(
@@ -76,6 +79,7 @@ macro_rules! from_gpu_column {
     };
 }
 
+#[cfg(feature = "gpu")]
 macro_rules! to_gpu_column {
     ($self:expr, $type:ty) => {
         gpu_column::Column::new(
@@ -134,6 +138,7 @@ impl<B: BitBlock> Column<B> {
     }
 
     /// Converts a GPU column into a host [`Column`].
+    #[cfg(feature = "gpu")]
     pub fn from_gpu_column(
         column: &gpu_column::Column, name: &str, data_type: DataType,
     ) -> Result<Self, Box<dyn Error>> {
@@ -166,6 +171,7 @@ impl<B: BitBlock> Column<B> {
     }
 
     /// Converts this host column into its GPU representation.
+    #[cfg(feature = "gpu")]
     pub fn to_gpu_column(&self) -> Result<gpu_column::Column, Box<dyn Error>> {
         match self.data_type {
             DataType::I8 => to_gpu_column!(self, i8),

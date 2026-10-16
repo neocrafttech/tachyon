@@ -6,6 +6,10 @@
  */
 
 fn main() {
+    if std::env::var_os("CARGO_FEATURE_GPU").is_none() {
+        return;
+    }
+
     let header_dir = "src/ffi/kernels";
     let cpp_file = format!("{}/error.cpp", header_dir);
     let header_file = format!("{}/error.h", header_dir);
