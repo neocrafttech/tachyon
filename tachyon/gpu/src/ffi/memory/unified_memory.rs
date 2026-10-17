@@ -65,7 +65,7 @@ impl CudaMemory for UnifiedMemory {
     fn from_slice<T: Sized>(_host_data: &[T]) -> CudaResult<Self> {
         unimplemented!()
     }
-    fn to_vec<T: Sized>(&self) -> CudaResult<Vec<T>> {
+    fn to_vec<T: bytemuck::CheckedBitPattern>(&self) -> CudaResult<Vec<T>> {
         unimplemented!()
     }
 }

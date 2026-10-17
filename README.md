@@ -17,6 +17,15 @@ cd tachyon
 ./bolt.sh test
 ```
 
+The default setup and CPU tests do not require CUDA. For GPU tests, run
+`./bolt.sh setup --cuda` on a machine with a working NVIDIA driver. This installs
+the CUDA compiler and runtime/NVRTC development libraries without the full
+toolkit or driver bundle. `./bolt.sh test` enables GPU tests when `nvidia-smi`
+reports a working GPU. If NVIDIA hardware is present but the driver is unavailable,
+tests stop with a diagnostic. Use `./bolt.sh test --cpu` to explicitly run CPU tests,
+or `./bolt.sh test --gpu` to require GPU tests. The `nouveau` driver does not provide
+CUDA support; the host needs an NVIDIA compute driver as well as the toolkit.
+
 ## Sample Usage
 ### Parse and inspect an expression
 ```rust

@@ -7,7 +7,8 @@
 
 /// A bit block primitive used by [`BitVector`].
 pub trait BitBlock:
-    Copy
+    gpu::column::BitmapElement
+    + Copy
     + Sized
     + PartialEq
     + std::ops::BitAnd<Output = Self>

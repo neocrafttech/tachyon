@@ -4,17 +4,24 @@
  * This source code is licensed under the Apache License, Version 2.0,
  * as found in the LICENSE file in the root directory of this source tree.
  */
+#[cfg(feature = "gpu")]
 use std::collections::HashMap;
 use std::error::Error;
 
+#[cfg(feature = "gpu")]
 use gpu::column as gpu_column;
 
 use crate::bit_vector::BitBlock;
+#[cfg(feature = "gpu")]
 use crate::codegen::{CodeBlock, CodeGen};
 use crate::column::Column;
+#[cfg(feature = "gpu")]
 use crate::data_type::DataType;
 use crate::error::ErrorMode;
-use crate::expr::{Expr, SchemaContext};
+use crate::expr::Expr;
+#[cfg(feature = "gpu")]
+use crate::expr::SchemaContext;
+#[cfg(feature = "gpu")]
 use crate::operator::Operator;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,10 +40,17 @@ pub async fn evaluate<B: BitBlock>(
     device: Device, error_mode: ErrorMode, expr: &Expr, columns: &[Column<B>],
 ) -> Result<Vec<Column<B>>, Box<dyn Error>> {
     match device {
+        #[cfg(feature = "gpu")]
         Device::GPU => evaluate_gpu(expr, error_mode, columns).await,
+        #[cfg(not(feature = "gpu"))]
+        Device::GPU => {
+            let _ = (expr, error_mode, columns);
+            Err("GPU support is disabled; rebuild with --features gpu".into())
+        }
     }
 }
 
+#[cfg(feature = "gpu")]
 async fn evaluate_gpu<B: BitBlock>(
     expr: &Expr, error_mode: ErrorMode, columns: &[Column<B>],
 ) -> Result<Vec<Column<B>>, Box<dyn Error>> {
@@ -56,6 +70,7 @@ async fn evaluate_gpu<B: BitBlock>(
     }
 }
 
+#[cfg(feature = "gpu")]
 async fn evaluate_gpu_row<B: BitBlock>(
     expr: &Expr, schema_context: &SchemaContext, columns: &[Column<B>],
 ) -> Result<Vec<Column<B>>, Box<dyn Error>> {
@@ -103,6 +118,7 @@ async fn evaluate_gpu_row<B: BitBlock>(
     Ok(result_cols)
 }
 
+#[cfg(feature = "gpu")]
 fn max_string_len_column<B: BitBlock>(col: &Column<B>) -> Result<usize, Box<dyn Error>> {
     let values = col
         .data_as_slice::<gpu_column::StringView>()
@@ -110,6 +126,7 @@ fn max_string_len_column<B: BitBlock>(col: &Column<B>) -> Result<usize, Box<dyn 
     Ok(values.iter().map(|sv| sv.size as usize).max().unwrap_or(0))
 }
 
+#[cfg(feature = "gpu")]
 fn estimate_string_row_capacity<B: BitBlock>(
     expr: &Expr, schema_context: &SchemaContext, columns: &[Column<B>],
 ) -> Result<usize, Box<dyn Error>> {
@@ -157,6 +174,7 @@ fn estimate_string_row_capacity<B: BitBlock>(
     }
 }
 
+#[cfg(feature = "gpu")]
 async fn evaluate_gpu_aggregate<B: BitBlock>(
     op: Operator, arg: &Expr, distinct: bool, schema_context: &SchemaContext, columns: &[Column<B>],
 ) -> Result<Vec<Column<B>>, Box<dyn Error>> {
@@ -205,6 +223,7 @@ async fn evaluate_gpu_aggregate<B: BitBlock>(
     Ok(result_cols)
 }
 
+#[cfg(feature = "gpu")]
 fn build_aggregate_nvrtc_code<B: BitBlock>(
     op: Operator, col_idx: u16, col_type: DataType, result_type: DataType, ansi_error_mode: bool,
 ) -> Result<String, Box<dyn Error>> {
@@ -232,4 +251,16 @@ fn build_aggregate_nvrtc_code<B: BitBlock>(
     };
 
     Ok(code)
+}
+
+#[cfg(all(test, not(feature = "gpu")))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn gpu_evaluation_requires_feature() {
+        let error =
+            evaluate::<u64>(Device::GPU, ErrorMode::Tachyon, &Expr::i32(1), &[]).await.unwrap_err();
+        assert!(error.to_string().contains("--features gpu"));
+    }
 }

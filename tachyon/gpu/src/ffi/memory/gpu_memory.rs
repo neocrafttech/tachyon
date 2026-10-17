@@ -22,7 +22,7 @@ impl GpuMemory {
         }
     }
 
-    pub fn to_vec<T: Sized>(&self) -> CudaResult<Vec<T>> {
+    pub fn to_vec<T: bytemuck::CheckedBitPattern>(&self) -> CudaResult<Vec<T>> {
         match self {
             GpuMemory::Device(mem) => mem.to_vec(),
         }

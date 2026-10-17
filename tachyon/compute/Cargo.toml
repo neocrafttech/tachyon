@@ -21,7 +21,7 @@ gpu = { path = "../gpu" }
 
 [features]
 default = []
-gpu = []
+gpu = ["gpu/gpu"]
 
 [dev-dependencies]
 rand.workspace = true

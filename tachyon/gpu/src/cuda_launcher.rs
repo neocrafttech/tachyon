@@ -201,9 +201,9 @@ pub async fn launch<B: Sized>(code: &str, input: &[Column], output: &[Column]) -
     }
     cuda::last_error()?;
 
-    let host_ctx = device_ctx.to_vec::<ContextFFI>().unwrap();
+    let host_ctx = device_ctx.to_vec::<u32>()?;
 
-    (host_ctx[0].error_code as KernelErrorCode).check_with_context("Kernel Error")?;
+    (host_ctx[0] as KernelErrorCode).check_with_context("Kernel Error")?;
 
     Ok(())
 }
@@ -240,9 +240,9 @@ pub async fn launch_aggregate<B: Sized>(
     }
     cuda::last_error()?;
 
-    let host_ctx = device_ctx.to_vec::<ContextFFI>().unwrap();
+    let host_ctx = device_ctx.to_vec::<u32>()?;
 
-    (host_ctx[0].error_code as KernelErrorCode).check_with_context("Kernel Error")?;
+    (host_ctx[0] as KernelErrorCode).check_with_context("Kernel Error")?;
 
     Ok(())
 }

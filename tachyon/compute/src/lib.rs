@@ -14,6 +14,7 @@
 /// Bitset utilities used for null tracking in columns.
 pub mod bit_vector;
 /// Code generation interfaces used to produce execution kernels.
+#[cfg(any(feature = "gpu", test))]
 mod codegen;
 /// Columnar in-memory data containers.
 pub mod column;

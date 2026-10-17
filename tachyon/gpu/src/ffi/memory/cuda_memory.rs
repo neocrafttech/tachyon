@@ -13,7 +13,7 @@ pub trait CudaMemory {
     /// Get the device pointer (always returns device memory pointer)
     fn device_ptr(&self) -> *mut c_void;
 
-    /// Get the number of elements
+    /// Get the allocation length in bytes.
     fn len(&self) -> usize;
 
     /// Check if empty
@@ -26,6 +26,7 @@ pub trait CudaMemory {
     where
         Self: Sized;
 
-    /// Copy all data to a new Vec on host
-    fn to_vec<T: Sized>(&self) -> CudaResult<Vec<T>>;
+    /// Copy all data to a new Vec on host, checking each value's representation.
+    /// Reject zero-sized types and byte lengths that do not fit whole elements.
+    fn to_vec<T: bytemuck::CheckedBitPattern>(&self) -> CudaResult<Vec<T>>;
 }

@@ -33,6 +33,7 @@ pub enum Operator {
 }
 
 impl Operator {
+    #[cfg(any(feature = "gpu", test))]
     pub(crate) fn is_binary(&self) -> bool {
         matches!(
             self,
